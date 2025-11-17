@@ -1,0 +1,4 @@
+name: DunceChat
+version: '1.0-SNAPSHOT'
+main: gg.corn.DunceChat.DunceChat
+api-version: '1.21'
