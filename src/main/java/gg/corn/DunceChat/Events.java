@@ -12,7 +12,6 @@ import org.bukkit.Sound;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import org.bukkit.entity.Player;
@@ -67,7 +66,7 @@ public class Events implements Listener {
     @EventHandler
     public void clickDunceMenu(@NotNull InventoryClickEvent event) {
 
-        if (event.getView().getTitle().equals("DunceChat Menu") && event.getView().getTopInventory().getHolder() == null) {
+        if (event.getView().title().equals(Component.text("DunceChat Menu")) && event.getView().getTopInventory().getHolder() == null) {
             event.setCancelled(true);
 
             if (event.getCurrentItem() == null)
@@ -96,7 +95,7 @@ public class Events implements Listener {
             if (gg.corn.DunceChat.DunceChat.isDunced(event.getPlayer())) {
                 // Cancel the command and possibly notify the player
                 event.setCancelled(true);
-                event.getPlayer().sendMessage(ChatColor.RED + "You are dunced and cannot use this command.");
+                event.getPlayer().sendMessage(Component.text("You are dunced and cannot use this command.", NamedTextColor.RED));
             }
         }
     }
@@ -118,16 +117,30 @@ public class Events implements Listener {
         Player player = event.getPlayer();
         String playerName = getDisplayName(player);
         String prefix = getPrefix(player);
-        String duncedPrefix = ChatColor.DARK_GRAY + "[" + ChatColor.GOLD+ plugin.getConfig().getString("dunced-prefix")+ ChatColor.DARK_GRAY + "]" + ChatColor.RESET;
-        String unmoderatedPrefix = ChatColor.DARK_GRAY + "[" + ChatColor.GOLD+ plugin.getConfig().getString("unmoderated-chat-prefix")+ ChatColor.DARK_GRAY + "]"+ ChatColor.RESET;
+
+        Component duncedPrefix = Component.text("[", NamedTextColor.DARK_GRAY)
+                .append(Component.text(plugin.getConfig().getString("dunced-prefix"), NamedTextColor.GOLD))
+                .append(Component.text("]", NamedTextColor.DARK_GRAY));
+
+        Component unmoderatedPrefix = Component.text("[", NamedTextColor.DARK_GRAY)
+                .append(Component.text(plugin.getConfig().getString("unmoderated-chat-prefix"), NamedTextColor.GOLD))
+                .append(Component.text("]", NamedTextColor.DARK_GRAY));
 
         if (gg.corn.DunceChat.DunceChat.isDunced(event.getPlayer())) {
             event.getRecipients().retainAll(gg.corn.DunceChat.DunceChat.getPlayersDunceChatVisible());
             event.setCancelled(true);
 
+            Component message = Component.text("<")
+                    .append(duncedPrefix)
+                    .append(LegacyComponentSerializer.legacySection().deserialize(prefix))
+                    .append(LegacyComponentSerializer.legacySection().deserialize(playerName))
+                    .append(Component.text("> "))
+                    .append(Component.text(event.getMessage()));
+
             for (Player recipient : event.getRecipients())
-                recipient.sendMessage("<" +duncedPrefix+ prefix+ playerName+ ChatColor.RESET+ ">" + " " + ChatColor.RESET + event.getMessage());
-            logger.info("<" +duncedPrefix+ prefix+ playerName+ ChatColor.RESET+ ">" + " " + ChatColor.RESET + event.getMessage());
+                recipient.sendMessage(message);
+
+            logger.info(LegacyComponentSerializer.legacySection().serialize(message));
         } else if (gg.corn.DunceChat.DunceChat.getInDunceChat(event.getPlayer())) {
             Set<Player> set = Sets.newHashSet(event.getPlayer());
             set.addAll(gg.corn.DunceChat.DunceChat.getPlayersDunceChatVisible());
@@ -135,14 +148,22 @@ public class Events implements Listener {
             event.getRecipients().retainAll(set);
             event.setCancelled(true);
 
+            Component message = Component.text("<")
+                    .append(unmoderatedPrefix)
+                    .append(LegacyComponentSerializer.legacySection().deserialize(prefix))
+                    .append(LegacyComponentSerializer.legacySection().deserialize(playerName))
+                    .append(Component.text("> "))
+                    .append(Component.text(event.getMessage()));
+
             for (Player recipient : event.getRecipients())
-                recipient.sendMessage("<" + unmoderatedPrefix+ prefix+ playerName+ ChatColor.RESET+ ">" + " " + ChatColor.RESET + event.getMessage());
-            logger.info("<" + unmoderatedPrefix+ prefix+ playerName+ ChatColor.RESET+ ">" + " " + ChatColor.RESET + event.getMessage());
+                recipient.sendMessage(message);
+
+            logger.info(LegacyComponentSerializer.legacySection().serialize(message));
         }
 
         if (plugin.getConfig().getBoolean("dunceStar"))
             if (!gg.corn.DunceChat.DunceChat.isDunced(event.getPlayer()) && gg.corn.DunceChat.DunceChat.dunceVisible(event.getPlayer()))
-                event.setFormat(event.getFormat().replace("%1$s", "%1$s" + ChatColor.GREEN + "*" + ChatColor.RESET));
+                event.setFormat(event.getFormat().replace("%1$s", "%1$s" + "§a*§r"));
 
     }
 
@@ -150,7 +171,7 @@ public class Events implements Listener {
         String papiDisplayName = plugin.getConfig().getString("display-name-placeholder");
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             String placeholderName = PlaceholderAPI.setPlaceholders(player, papiDisplayName);
-            return ChatColor.translateAlternateColorCodes('&', placeholderName);
+            return placeholderName;
         } else {
             return player.getName();
         }
@@ -159,9 +180,9 @@ public class Events implements Listener {
         String papiPrefix = plugin.getConfig().getString("prefix-placeholder");
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             String placeholderName = PlaceholderAPI.setPlaceholders(player, papiPrefix);
-            return ChatColor.translateAlternateColorCodes('&', placeholderName);
+            return placeholderName;
         } else {
-            return null;
+            return "";
         }
     }
 

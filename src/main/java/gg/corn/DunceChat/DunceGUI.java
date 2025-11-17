@@ -2,7 +2,8 @@ package gg.corn.DunceChat;
 
 import com.google.common.collect.Lists;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
@@ -43,7 +44,7 @@ public class DunceGUI implements CommandExecutor {
 
 
     public static void constructDunceGUI(Player player) {
-        Inventory inventory = player.getServer().createInventory(null, 9, "DunceChat Menu");
+        Inventory inventory = player.getServer().createInventory(null, 9, Component.text("DunceChat Menu"));
 
 
         if (!gg.corn.DunceChat.DunceChat.isDunced(player)) {
@@ -64,20 +65,24 @@ public class DunceGUI implements CommandExecutor {
         ItemStack item = new ItemStack(Material.GREEN_STAINED_GLASS_PANE, 1);
         ItemMeta meta = item.getItemMeta();
 
-        List<String> lore = Lists.newArrayList(
-                DunceChat.baseColor() + "Dunced on: " + DunceChat.highlightColor() +
-                        date);
+        assert meta != null;
 
-        lore.add(DunceChat.baseColor() + "Expires on: " + DunceChat.highlightColor() + Objects.requireNonNullElse(expiry, "permanent"));
+        List<Component> lore = Lists.newArrayList(
+                Component.text("Dunced on: ", NamedTextColor.GRAY)
+                        .append(Component.text(date, NamedTextColor.GOLD)));
+
+        lore.add(Component.text("Expires on: ", NamedTextColor.GRAY)
+                .append(Component.text(expiry != null ? expiry : "never", NamedTextColor.GOLD)));
         if (staffName != null){
-            lore.add(gg.corn.DunceChat.DunceChat.baseColor() + "Marked by: " + gg.corn.DunceChat.DunceChat.highlightColor() + staffName);
+            lore.add(Component.text("Marked by: ", NamedTextColor.GRAY)
+                    .append(Component.text(staffName, NamedTextColor.GOLD)));
         }
         if (reason != null)
-            lore.add(ChatColor.GRAY + "Reason: " + gg.corn.DunceChat.DunceChat.highlightColor() + reason);
+            lore.add(Component.text("Reason: ", NamedTextColor.GRAY)
+                    .append(Component.text(reason, NamedTextColor.GOLD)));
 
-        assert meta != null;
-        meta.setDisplayName(ChatColor.GREEN + "You are dunced!");
-        meta.setLore(lore);
+        meta.displayName(Component.text("You are dunced!", NamedTextColor.GREEN));
+        meta.lore(lore);
         item.setItemMeta(meta);
 
         return item;
@@ -90,9 +95,10 @@ public class DunceGUI implements CommandExecutor {
         ItemMeta meta = item.getItemMeta();
 
         assert meta != null;
-        meta.setDisplayName(visible ? ChatColor.GREEN + "Dunce Chat is visible" : ChatColor.RED + "Dunce Chat is hidden");
-        meta.setLore(Lists.newArrayList(
-                ChatColor.GRAY + "Click to " + (visible ? "hide" : "unhide") + " the Dunce Chat."));
+        meta.displayName(Component.text("Dunce Chat is " + (visible ? "visible" : "hidden"),
+                visible ? NamedTextColor.GREEN : NamedTextColor.RED));
+        meta.lore(Lists.newArrayList(
+                Component.text("Click to " + (visible ? "hide" : "unhide") + " the Dunce Chat.", NamedTextColor.GRAY)));
         item.setItemMeta(meta);
 
         return NBTHandler.addString(item, dunceVisibility, "tag");
@@ -104,10 +110,9 @@ public class DunceGUI implements CommandExecutor {
                 1);
         ItemMeta meta = item.getItemMeta();
         assert meta != null;
-        meta.setDisplayName(
-                inDunceChat ? ChatColor.GREEN + "Speaking in Dunce Chat" : ChatColor.RED + "Speaking in Public Chat");
-        meta.setLore(
-                Lists.newArrayList(ChatColor.GRAY + "Click to switch to " + (inDunceChat ? "Public" : "Dunce") + " chat."));
+        meta.displayName(Component.text(inDunceChat ? "Speaking in Dunce Chat" : "Speaking in Public Chat",
+                inDunceChat ? NamedTextColor.GREEN : NamedTextColor.RED));
+        meta.lore(Lists.newArrayList(Component.text("Click to switch to " + (inDunceChat ? "Public" : "Dunce") + " chat.", NamedTextColor.GRAY)));
         item.setItemMeta(meta);
 
         return NBTHandler.addString(item, talkingInDunceChat, "tag");

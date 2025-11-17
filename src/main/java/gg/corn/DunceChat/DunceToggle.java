@@ -1,5 +1,6 @@
 package gg.corn.DunceChat;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -17,7 +18,9 @@ public class DunceToggle implements CommandExecutor {
                 boolean visible = gg.corn.DunceChat.DunceChat.dunceVisible(player);
                 if (!visible)
                     gg.corn.DunceChat.DunceChat.setDunceChatVisible(player, true);
-                    sender.sendMessage(gg.corn.DunceChat.DunceChat.baseColor() +"Dunce chat "+gg.corn.DunceChat.DunceChat.highlightColor()+"visible"+gg.corn.DunceChat.DunceChat.baseColor()+".");
+                    sender.sendMessage(Component.text("Dunce chat ", DunceChat.baseColor())
+                            .append(Component.text("visible", DunceChat.highlightColor()))
+                            .append(Component.text(".", DunceChat.baseColor())));
             }
         }
 
@@ -27,7 +30,9 @@ public class DunceToggle implements CommandExecutor {
                 boolean visible = gg.corn.DunceChat.DunceChat.dunceVisible(player);
                 if (visible)
                     gg.corn.DunceChat.DunceChat.setDunceChatVisible(player, false);
-                    sender.sendMessage(gg.corn.DunceChat.DunceChat.baseColor() +"Dunce chat "+gg.corn.DunceChat.DunceChat.highlightColor()+"hidden"+gg.corn.DunceChat.DunceChat.baseColor()+".");
+                    sender.sendMessage(Component.text("Dunce chat ", DunceChat.baseColor())
+                            .append(Component.text("hidden", DunceChat.highlightColor()))
+                            .append(Component.text(".", DunceChat.baseColor())));
             }
         }
 

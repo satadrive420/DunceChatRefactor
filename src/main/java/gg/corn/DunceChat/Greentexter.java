@@ -3,7 +3,6 @@ package gg.corn.DunceChat;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.bukkit.ChatColor;
 
 
 public class Greentexter implements Listener {
@@ -23,8 +22,8 @@ public class Greentexter implements Listener {
                 // Check if the character following ">" is not typically used in emoticons
                 if (message.length() > 1 && !Character.isWhitespace(message.charAt(1)) && Character.isLetterOrDigit(message.charAt(1))) {
                     // It's more likely a command or statement, not an emoticon
-                    // Set the message color to light green
-                    event.setMessage(ChatColor.GREEN + message);
+                    // Set the message color to light green using legacy format code
+                    event.setMessage("§a" + message);
                 }
             }
         }

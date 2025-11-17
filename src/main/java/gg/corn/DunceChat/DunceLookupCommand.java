@@ -1,6 +1,7 @@
 package gg.corn.DunceChat;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -20,17 +21,17 @@ public class DunceLookupCommand implements CommandExecutor {
 
                 // Check if player has permission
                 if (!sender.hasPermission("duncechat.admin")){
-                    sender.sendMessage("You don't have permission to execute this command.");
+                    sender.sendMessage(Component.text("You don't have permission to execute this command.", NamedTextColor.RED));
                 }
 
                 // If the playerUUID is null, it means the player does not exist in the database
                 if (playerUUID == null) {
-                    sender.sendMessage(ChatColor.RED + "Player '" + playerName + "' has never joined, or has recently changed their name!");
+                    sender.sendMessage(Component.text("Player '" + playerName + "' has never joined, or has recently changed their name!", NamedTextColor.RED));
                     return true;
                 }
 
                 if (!DunceChat.isDunced(playerUUID)) {
-                    sender.sendMessage(ChatColor.RED + "Player '" + playerName + "' is not dunced!");
+                    sender.sendMessage(Component.text("Player '" + playerName + "' is not dunced!", NamedTextColor.RED));
                     return true;
                 }
 
@@ -41,15 +42,19 @@ public class DunceLookupCommand implements CommandExecutor {
                 String expiry = MySQLHandler.getDunceExpiry(playerUUID);
 
                 // Send dunce details to the command sender
-                sender.sendMessage(ChatColor.GOLD + "Dunce Details for " + playerName + ":");
-                sender.sendMessage(ChatColor.GREEN + "Dunced on: " + ChatColor.WHITE + date);
-                sender.sendMessage(ChatColor.GREEN + "Expires on: " + ChatColor.WHITE + expiry);
-                sender.sendMessage(ChatColor.GREEN + "Marked by: " + ChatColor.WHITE + staffName);
-                sender.sendMessage(ChatColor.GREEN + "Reason: " + ChatColor.WHITE + reason);
+                sender.sendMessage(Component.text("Dunce Details for " + playerName + ":", NamedTextColor.GOLD));
+                sender.sendMessage(Component.text("Dunced on: ", NamedTextColor.GREEN)
+                        .append(Component.text(date, NamedTextColor.WHITE)));
+                sender.sendMessage(Component.text("Expires on: ", NamedTextColor.GREEN)
+                        .append(Component.text(expiry, NamedTextColor.WHITE)));
+                sender.sendMessage(Component.text("Marked by: ", NamedTextColor.GREEN)
+                        .append(Component.text(staffName, NamedTextColor.WHITE)));
+                sender.sendMessage(Component.text("Reason: ", NamedTextColor.GREEN)
+                        .append(Component.text(reason, NamedTextColor.WHITE)));
 
                 return true;
             } else {
-                sender.sendMessage(ChatColor.RED + "Usage: /duncelookup <player>");
+                sender.sendMessage(Component.text("Usage: /duncelookup <player>", NamedTextColor.RED));
                 return false;
             }
         }

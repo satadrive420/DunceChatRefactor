@@ -1,7 +1,8 @@
 package gg.corn.DunceChat;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -15,9 +16,9 @@ public class ClearChat implements CommandExecutor {
 		if (sender.hasPermission("dunce.clearchat"))
 			for (Player player : Bukkit.getOnlinePlayers())
 				for (int i = 0; i < 100; i++)
-					player.sendMessage("");
+					player.sendMessage(Component.empty());
 		else
-			sender.sendMessage(ChatColor.RED + "Insufficient Permissions!");
+			sender.sendMessage(Component.text("Insufficient Permissions!", NamedTextColor.RED));
 		return true;
 	}
 
