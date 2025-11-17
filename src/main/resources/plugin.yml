@@ -2,3 +2,38 @@ name: DunceChat
 version: '1.0-SNAPSHOT'
 main: gg.corn.DunceChat.DunceChat
 api-version: '1.21'
+softdepend:
+  - PlaceholderAPI
+commands:
+  duncemigrate:
+    description: Migrate from old schema to new schema
+    usage: /duncemigrate
+    permission: duncechat.admin
+  dunce:
+    usage: /dunce <player> <duration> <reason>
+    description: Central command for managing rule-breaking players.
+  dc:
+    usage: /dc <message>
+    description: Send a message to dunce chat
+  clearchat:
+    usage: /clearchat
+    description: Clear the chat
+  dcoff:
+    usage: /dcoff
+    description: Hides the Unmoderated Chat.
+  dcon:
+    usage: /dcon
+    description: Shows the Unmoderated Chat.
+  undunce:
+    usage: /undunce <player>
+    description: Undunce a player.
+  duncemenu:
+    usage: /duncemenu
+    description: Shows the DunceChat Menu.
+  duncelookup:
+    usage: /duncelookup <player>
+    aliases: dl
+    description: Look up details on a dunced player.
+  duncereload:
+    usage: /duncereload
+    description: Reloads the configuration.

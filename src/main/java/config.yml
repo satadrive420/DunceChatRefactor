@@ -5,6 +5,9 @@ mysql:
   username: 'your_username'
   password: 'your_password'
 
+# Auto-migrate from old schema on startup (recommended)
+auto-migrate: true
+
 visible-by-default: false
 # requires PlaceholderAPI
 display-name-placeholder: "%player_name%"
