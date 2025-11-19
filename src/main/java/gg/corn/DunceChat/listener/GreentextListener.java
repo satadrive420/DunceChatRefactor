@@ -1,8 +1,12 @@
 package gg.corn.DunceChat.listener;
 
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.Plugin;
 
 /**
@@ -16,15 +20,16 @@ public class GreentextListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
+    @EventHandler(priority = EventPriority.NORMAL)
+    public void onPlayerChat(AsyncChatEvent event) {
         boolean isEnabled = plugin.getConfig().getBoolean("auto-green-text", true);
 
         if (!isEnabled) {
             return;
         }
 
-        String message = event.getMessage();
+        // Get the plain text version of the message
+        String message = PlainTextComponentSerializer.plainText().serialize(event.message());
 
         // Check if the message starts with ">"
         if (message.startsWith(">")) {
@@ -32,8 +37,8 @@ public class GreentextListener implements Listener {
             if (message.length() > 1 &&
                 !Character.isWhitespace(message.charAt(1)) &&
                 Character.isLetterOrDigit(message.charAt(1))) {
-                // Set the message color to green using legacy format code
-                event.setMessage("§a" + message);
+                // Set the message color to green using Adventure Component API
+                event.message(Component.text(message, NamedTextColor.GREEN));
             }
         }
     }

@@ -16,14 +16,14 @@ import java.util.UUID;
 /**
  * Refactored lookup command using services
  */
-public class LookupCommandNew implements CommandExecutor {
+public class LookupCommand implements CommandExecutor {
 
     private final DunceService dunceService;
     private final PlayerService playerService;
     private final MessageManager messageManager;
     private static final SimpleDateFormat DATE_FORMATTER = new SimpleDateFormat("yyyy/MM/dd HH:mm");
 
-    public LookupCommandNew(DunceService dunceService, PlayerService playerService, MessageManager messageManager) {
+    public LookupCommand(DunceService dunceService, PlayerService playerService, MessageManager messageManager) {
         this.dunceService = dunceService;
         this.playerService = playerService;
         this.messageManager = messageManager;

@@ -4,19 +4,18 @@ import gg.corn.DunceChat.service.DunceService;
 import gg.corn.DunceChat.service.PlayerService;
 import gg.corn.DunceChat.service.PreferencesService;
 import gg.corn.DunceChat.util.MessageManager;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.Bukkit;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
-import me.clip.placeholderapi.PlaceholderAPI;
 
 import java.util.Arrays;
 import java.util.List;
@@ -35,7 +34,7 @@ public class ChatListener implements Listener {
     private final MessageManager messageManager;
     private final FileConfiguration config;
     private final List<String> disallowedWords;
-    private static final Logger logger = Bukkit.getLogger();
+    private static final Logger logger = Logger.getLogger("DunceChat");
 
     public ChatListener(DunceService dunceService, PlayerService playerService,
                        PreferencesService preferencesService, MessageManager messageManager,
@@ -58,13 +57,13 @@ public class ChatListener implements Listener {
         playerService.handlePlayerQuit(event.getPlayer());
     }
 
-    @EventHandler
-    public void onPlayerChat(@NotNull AsyncPlayerChatEvent event) {
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerChat(@NotNull AsyncChatEvent event) {
         Player player = event.getPlayer();
         UUID playerUuid = player.getUniqueId();
 
-        String playerName = getDisplayName(player);
-        String prefix = getPrefix(player);
+        Component playerNameComponent = playerService.getDisplayNameComponent(player);
+        Component prefixComponent = playerService.getPrefixComponent(player);
 
         String duncedPrefixText = config.getString("dunced-prefix", "Dunced");
         String unmoderatedPrefixText = config.getString("unmoderated-chat-prefix", "UC");
@@ -82,54 +81,53 @@ public class ChatListener implements Listener {
         if (dunceService.isDunced(playerUuid)) {
             // Handle dunced player chat
             Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
-            event.getRecipients().retainAll(recipients);
-            event.setCancelled(true);
+            event.viewers().retainAll(recipients);
 
             Component message = Component.text("<")
                     .append(duncedPrefix)
-                    .append(LegacyComponentSerializer.legacySection().deserialize(prefix))
-                    .append(LegacyComponentSerializer.legacySection().deserialize(playerName))
+                    .append(prefixComponent)
+                    .append(playerNameComponent)
                     .append(Component.text("> "))
-                    .append(Component.text(event.getMessage()));
+                    .append(event.message());
 
-            for (Player recipient : event.getRecipients()) {
-                recipient.sendMessage(message);
-            }
+            event.renderer((source, sourceDisplayName, msg, viewer) -> message);
 
-            logger.info(LegacyComponentSerializer.legacySection().serialize(message));
+            logger.info(PlainTextComponentSerializer.plainText().serialize(message));
 
         } else if (preferencesService.isInDunceChat(playerUuid)) {
             // Handle unmoderated chat
             Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
             recipients.add(player);
 
-            event.getRecipients().retainAll(recipients);
-            event.setCancelled(true);
+            event.viewers().retainAll(recipients);
 
             Component message = Component.text("<")
                     .append(unmoderatedPrefix)
-                    .append(LegacyComponentSerializer.legacySection().deserialize(prefix))
-                    .append(LegacyComponentSerializer.legacySection().deserialize(playerName))
+                    .append(prefixComponent)
+                    .append(playerNameComponent)
                     .append(Component.text("> "))
-                    .append(Component.text(event.getMessage()));
+                    .append(event.message());
 
-            for (Player recipient : event.getRecipients()) {
-                recipient.sendMessage(message);
-            }
+            event.renderer((source, sourceDisplayName, msg, viewer) -> message);
 
-            logger.info(LegacyComponentSerializer.legacySection().serialize(message));
+            logger.info(PlainTextComponentSerializer.plainText().serialize(message));
         }
 
         // Add dunce star if enabled
         if (config.getBoolean("dunceStar", false)) {
             if (!dunceService.isDunced(playerUuid) && preferencesService.isDunceChatVisible(playerUuid)) {
-                event.setFormat(event.getFormat().replace("%1$s", "%1$s§a*§r"));
+                // Use renderer to add the star to the player name
+                event.renderer((source, sourceDisplayName, msg, viewer) -> {
+                    Component nameWithStar = sourceDisplayName.append(Component.text("*")
+                            .color(net.kyori.adventure.text.format.NamedTextColor.GREEN));
+                    return Component.translatable("chat.type.text", nameWithStar, msg);
+                });
             }
         }
     }
 
-    @EventHandler
-    public void onWordFilter(AsyncPlayerChatEvent event) {
+    @EventHandler(priority = EventPriority.LOW)
+    public void onWordFilter(AsyncChatEvent event) {
         Player player = event.getPlayer();
 
         // Skip if player has admin permission
@@ -142,7 +140,7 @@ public class ChatListener implements Listener {
             return;
         }
 
-        String message = event.getMessage().toLowerCase();
+        String message = PlainTextComponentSerializer.plainText().serialize(event.message()).toLowerCase();
 
         for (String word : disallowedWords) {
             if (message.contains(word.toLowerCase())) {
@@ -190,22 +188,6 @@ public class ChatListener implements Listener {
                 });
             }
         }
-    }
-
-    private String getDisplayName(Player player) {
-        String papiDisplayName = config.getString("display-name-placeholder");
-        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null && papiDisplayName != null) {
-            return PlaceholderAPI.setPlaceholders(player, papiDisplayName);
-        }
-        return player.getName();
-    }
-
-    private String getPrefix(Player player) {
-        String papiPrefix = config.getString("prefix-placeholder");
-        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null && papiPrefix != null) {
-            return PlaceholderAPI.setPlaceholders(player, papiPrefix);
-        }
-        return "";
     }
 }
 

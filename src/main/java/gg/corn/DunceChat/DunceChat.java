@@ -103,22 +103,56 @@ public class DunceChat extends JavaPlugin {
      * Initialize database connection and schema
      */
     private void initializeDatabase() {
-        String host = getConfig().getString("mysql.host");
-        int port = getConfig().getInt("mysql.port");
-        String database = getConfig().getString("mysql.database");
-        String username = getConfig().getString("mysql.username");
-        String password = getConfig().getString("mysql.password");
+        try {
+            getLogger().info("=== Database Initialization Starting ===");
 
-        databaseManager = new DatabaseManager(host, port, database, username, password);
-        databaseManager.initialize();
+            String databaseType = getConfig().getString("database.type", "h2").toLowerCase();
+            getLogger().info("Database type from config: " + databaseType);
 
-        schemaManager = new SchemaManager(databaseManager);
-        schemaManager.initializeSchema();
+            if (databaseType.equals("mysql")) {
+                String host = getConfig().getString("database.mysql.host");
+                int port = getConfig().getInt("database.mysql.port");
+                String database = getConfig().getString("database.mysql.database");
+                String username = getConfig().getString("database.mysql.username");
+                String password = getConfig().getString("database.mysql.password");
 
-        // Auto-migrate if enabled
-        if (getConfig().getBoolean("auto-migrate", true)) {
-            getLogger().info("Auto-migration enabled, checking for old schema...");
-            schemaManager.migrateFromOldSchema();
+                getLogger().info("MySQL Configuration: " + host + ":" + port + "/" + database);
+                databaseManager = new DatabaseManager(host, port, database, username, password);
+            } else {
+                // Default to H2
+                String h2FileConfig = getConfig().getString("database.h2.file", "database");
+                // If path is not absolute, make it relative to plugin folder
+                String h2FilePath;
+                if (new File(h2FileConfig).isAbsolute()) {
+                    h2FilePath = h2FileConfig;
+                } else {
+                    h2FilePath = getDataFolder().getAbsolutePath() + File.separator + h2FileConfig;
+                }
+                getLogger().info("H2 file path: " + h2FilePath);
+                databaseManager = new DatabaseManager(h2FilePath);
+            }
+
+            getLogger().info("Initializing database connection pool...");
+            databaseManager.initialize();
+            getLogger().info("Database connection pool initialized!");
+
+            getLogger().info("Initializing database schema...");
+            schemaManager = new SchemaManager(databaseManager);
+            schemaManager.initializeSchema();
+            getLogger().info("Database schema initialized!");
+
+            // Auto-migrate if enabled
+            if (getConfig().getBoolean("auto-migrate", true)) {
+                getLogger().info("Auto-migration enabled, checking for old schema...");
+                schemaManager.migrateFromOldSchema();
+            }
+
+            getLogger().info("=== Database Initialization Complete ===");
+        } catch (Exception e) {
+            getLogger().severe("=== Database Initialization FAILED ===");
+            getLogger().severe("Failed to initialize database! Plugin may not function correctly.");
+            getLogger().severe("Error: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -139,7 +173,7 @@ public class DunceChat extends JavaPlugin {
      * Initialize all services
      */
     private void initializeServices() {
-        playerService = new PlayerService(playerRepository);
+        playerService = new PlayerService(playerRepository, getConfig());
         preferencesService = new PreferencesService(preferencesRepository);
         dunceService = new DunceService(dunceRepository, playerService, preferencesService, messageManager);
 
@@ -151,14 +185,18 @@ public class DunceChat extends JavaPlugin {
      */
     private void registerCommands() {
         // Dunce/Undunce commands
-        DunceCommandNew dunceCommand = new DunceCommandNew(dunceService, playerService, messageManager);
+        DunceCommand dunceCommand = new DunceCommand(dunceService, playerService, messageManager);
         Objects.requireNonNull(getCommand("dunce")).setExecutor(dunceCommand);
         Objects.requireNonNull(getCommand("dunce")).setTabCompleter(dunceCommand);
         Objects.requireNonNull(getCommand("undunce")).setExecutor(dunceCommand);
         Objects.requireNonNull(getCommand("undunce")).setTabCompleter(dunceCommand);
 
+        // Dunce Chat message command
+        DunceChatCommand dunceChatCommand = new DunceChatCommand(dunceService, preferencesService, messageManager);
+        Objects.requireNonNull(getCommand("duncechat")).setExecutor(dunceChatCommand);
+
         // Toggle commands
-        ToggleCommandNew toggleCommand = new ToggleCommandNew(preferencesService, messageManager);
+        ToggleCommand toggleCommand = new ToggleCommand(preferencesService, messageManager);
         Objects.requireNonNull(getCommand("dcon")).setExecutor(toggleCommand);
         Objects.requireNonNull(getCommand("dcoff")).setExecutor(toggleCommand);
 
@@ -166,9 +204,9 @@ public class DunceChat extends JavaPlugin {
         Objects.requireNonNull(getCommand("duncemenu")).setExecutor(new MenuCommand(guiBuilder));
 
         // Utility commands
-        Objects.requireNonNull(getCommand("clearchat")).setExecutor(new ClearChatCommandNew(messageManager));
-        Objects.requireNonNull(getCommand("duncereload")).setExecutor(new ReloadCommandNew(this, messageManager));
-        Objects.requireNonNull(getCommand("duncelookup")).setExecutor(new LookupCommandNew(dunceService, playerService, messageManager));
+        Objects.requireNonNull(getCommand("clearchat")).setExecutor(new ClearChatCommand(messageManager));
+        Objects.requireNonNull(getCommand("duncereload")).setExecutor(new ReloadCommand(this, messageManager));
+        Objects.requireNonNull(getCommand("duncelookup")).setExecutor(new LookupCommand(dunceService, playerService, messageManager));
         Objects.requireNonNull(getCommand("duncemigrate")).setExecutor(new MigrateCommand(schemaManager, messageManager));
 
         getLogger().info("Commands registered.");
@@ -197,8 +235,18 @@ public class DunceChat extends JavaPlugin {
      * Start the scheduler that checks for expired dunces
      */
     private void startExpiryChecker() {
+        if (databaseManager == null || !databaseManager.isInitialized()) {
+            getLogger().warning("Cannot start expiry checker - database not initialized!");
+            return;
+        }
+
         getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
-            dunceService.processExpiredDunces();
+            try {
+                dunceService.processExpiredDunces();
+            } catch (Exception e) {
+                getLogger().severe("Error processing expired dunces: " + e.getMessage());
+                e.printStackTrace();
+            }
         }, 0L, 20L); // Run every second
 
         getLogger().info("Expiry checker started.");

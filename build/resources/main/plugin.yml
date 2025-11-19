@@ -12,9 +12,11 @@ commands:
   dunce:
     usage: /dunce <player> <duration> <reason>
     description: Central command for managing rule-breaking players.
-  dc:
-    usage: /dc <message>
-    description: Send a message to dunce chat
+  duncechat:
+    usage: /duncechat <message>
+    aliases: [dc]
+    description: Send a message in Dunce Chat
+    permission: duncechat.use
   clearchat:
     usage: /clearchat
     description: Clear the chat

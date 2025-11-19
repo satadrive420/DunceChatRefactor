@@ -11,12 +11,12 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Refactored toggle command using services
  */
-public class ToggleCommandNew implements CommandExecutor {
+public class ToggleCommand implements CommandExecutor {
 
     private final PreferencesService preferencesService;
     private final MessageManager messageManager;
 
-    public ToggleCommandNew(PreferencesService preferencesService, MessageManager messageManager) {
+    public ToggleCommand(PreferencesService preferencesService, MessageManager messageManager) {
         this.preferencesService = preferencesService;
         this.messageManager = messageManager;
     }

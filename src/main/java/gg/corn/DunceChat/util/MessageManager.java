@@ -1,28 +1,49 @@
 package gg.corn.DunceChat.util;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.Map;
 import java.util.Properties;
 
 /**
- * Handles loading and formatting of messages from messages.properties
+ * Handles loading and formatting of messages from messages.properties using MiniMessage
  */
 public class MessageManager {
 
     private final Properties messages;
     private final Plugin plugin;
+    private final MiniMessage miniMessage;
+    private String baseColor;
+    private String highlightColor;
 
     public MessageManager(Plugin plugin) {
         this.plugin = plugin;
         this.messages = new Properties();
+        this.miniMessage = MiniMessage.miniMessage();
+        loadColors();
         loadMessages();
+    }
+
+    /**
+     * Load colors from config.yml
+     */
+    private void loadColors() {
+        FileConfiguration config = plugin.getConfig();
+
+        // Get color names from config - MiniMessage uses lowercase with underscores
+        baseColor = config.getString("baseColor", "gray").toLowerCase().replace(" ", "_");
+        highlightColor = config.getString("highlightColor", "gold").toLowerCase().replace(" ", "_");
+
+        plugin.getLogger().info("Loaded colors - Base: " + baseColor + ", Highlight: " + highlightColor);
     }
 
     /**
@@ -58,18 +79,19 @@ public class MessageManager {
      */
     public void reload() {
         messages.clear();
+        loadColors();
         loadMessages();
     }
 
     /**
-     * Get a raw message string
+     * Get a raw message string (without MiniMessage parsing)
      */
     public String getRaw(String key) {
-        return messages.getProperty(key, "§cMissing message: " + key);
+        return messages.getProperty(key, "<red>Missing message: " + key);
     }
 
     /**
-     * Get a formatted message string with placeholders
+     * Get a formatted message string with placeholders (without MiniMessage parsing)
      */
     public String getRaw(String key, Object... args) {
         String message = getRaw(key);
@@ -77,19 +99,84 @@ public class MessageManager {
     }
 
     /**
-     * Get a Component message
+     * Get a Component message using MiniMessage
      */
     public Component get(String key) {
         String message = getRaw(key);
-        return LegacyComponentSerializer.legacySection().deserialize(message);
+        return miniMessage.deserialize(message, getColorResolvers());
     }
 
     /**
-     * Get a Component message with placeholders
+     * Get a Component message with placeholders using MiniMessage
      */
     public Component get(String key, Object... args) {
         String message = getRaw(key, args);
-        return LegacyComponentSerializer.legacySection().deserialize(message);
+        return miniMessage.deserialize(message, getColorResolvers());
+    }
+
+    /**
+     * Get a Component message with Component placeholders
+     * This allows passing Components (like from PlaceholderAPI) that preserve their colors
+     *
+     * @param key The message key
+     * @param placeholderName The name of the placeholder (e.g., "player")
+     * @param component The component to insert
+     * @return The formatted message
+     */
+    public Component getWithComponent(String key, String placeholderName, Component component) {
+        String message = getRaw(key);
+
+        TagResolver resolver = TagResolver.resolver(
+            getColorResolvers(),
+            Placeholder.component(placeholderName, component)
+        );
+
+        return miniMessage.deserialize(message, resolver);
+    }
+
+    /**
+     * Get a Component message with multiple Component placeholders
+     *
+     * @param key The message key
+     * @param placeholders Map of placeholder names to components
+     * @return The formatted message
+     */
+    public Component getWithComponents(String key, Map<String, Component> placeholders) {
+        String message = getRaw(key);
+
+        // Debug logging
+        plugin.getLogger().info("[DEBUG] Message template: " + message);
+        for (Map.Entry<String, Component> entry : placeholders.entrySet()) {
+            plugin.getLogger().info("[DEBUG] Placeholder '" + entry.getKey() + "': " +
+                PlainTextComponentSerializer.plainText().serialize(entry.getValue()));
+        }
+
+        TagResolver.Builder resolverBuilder = TagResolver.builder();
+        resolverBuilder.resolvers(getColorResolvers());
+
+        for (Map.Entry<String, Component> entry : placeholders.entrySet()) {
+            resolverBuilder.resolver(Placeholder.component(entry.getKey(), entry.getValue()));
+        }
+
+        Component result = miniMessage.deserialize(message, resolverBuilder.build());
+        plugin.getLogger().info("[DEBUG] Result: " + PlainTextComponentSerializer.plainText().serialize(result));
+        return result;
+    }
+
+    /**
+     * Get tag resolvers for baseColor and highlightColor
+     */
+    private TagResolver getColorResolvers() {
+        return TagResolver.resolver(
+            TagResolver.resolver("base_color", (argumentQueue, context) ->
+                net.kyori.adventure.text.minimessage.tag.Tag.styling(
+                    net.kyori.adventure.text.format.NamedTextColor.NAMES.value(baseColor)
+                )),
+            TagResolver.resolver("highlight_color", (argumentQueue, context) ->
+                net.kyori.adventure.text.minimessage.tag.Tag.styling(
+                    net.kyori.adventure.text.format.NamedTextColor.NAMES.value(highlightColor)
+                ))
+        );
     }
 
     /**

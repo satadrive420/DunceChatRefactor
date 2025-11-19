@@ -4,13 +4,13 @@ import gg.corn.DunceChat.model.DunceRecord;
 import gg.corn.DunceChat.repository.DunceRepository;
 import gg.corn.DunceChat.util.MessageManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * Service for dunce-related business logic
@@ -22,6 +22,7 @@ public class DunceService {
     private final PreferencesService preferencesService;
     private final MessageManager messageManager;
     private static final SimpleDateFormat DATE_FORMATTER = new SimpleDateFormat("yyyy/MM/dd HH:mm");
+    private static final Logger logger = Logger.getLogger("DunceChat");
 
     public DunceService(DunceRepository dunceRepository, PlayerService playerService,
                        PreferencesService preferencesService, MessageManager messageManager) {
@@ -109,7 +110,7 @@ public class DunceService {
 
             String playerName = playerService.getNameByUuid(record.getPlayerUuid())
                     .orElse("Unknown");
-            Bukkit.getLogger().info("[DunceChat] Auto-undunced " + playerName + " (expired)");
+            logger.info("[DunceChat] Auto-undunced " + playerName + " (expired)");
         }
     }
 
@@ -117,10 +118,18 @@ public class DunceService {
      * Broadcast dunce message to all online players
      */
     private void broadcastDunceMessage(UUID playerUuid, String reason, UUID staffUuid, Timestamp expiresAt) {
-        String playerName = playerService.getNameByUuid(playerUuid).orElse("Unknown");
-        String staffName = staffUuid != null
-            ? playerService.getNameByUuid(staffUuid).orElse("CONSOLE")
-            : "CONSOLE";
+        // Try to get the online player for PlaceholderAPI support
+        Player onlinePlayer = Bukkit.getPlayer(playerUuid);
+        String playerName = onlinePlayer != null
+            ? playerService.getDisplayName(onlinePlayer)
+            : playerService.getNameByUuid(playerUuid).orElse("Unknown");
+
+        Player onlineStaff = staffUuid != null ? Bukkit.getPlayer(staffUuid) : null;
+        String staffName = onlineStaff != null
+            ? playerService.getDisplayName(onlineStaff)
+            : (staffUuid != null
+                ? playerService.getNameByUuid(staffUuid).orElse("CONSOLE")
+                : "CONSOLE");
 
         String expiryText = expiresAt == null ? messageManager.getRaw("dunce_expires_never") : DATE_FORMATTER.format(expiresAt);
         String reasonText = (reason != null && !reason.isEmpty()) ? messageManager.getRaw("dunced_reason", reason) : "";
@@ -144,10 +153,18 @@ public class DunceService {
      * Broadcast undunce message to all online players
      */
     private void broadcastUndunceMessage(UUID playerUuid, UUID staffUuid) {
-        String playerName = playerService.getNameByUuid(playerUuid).orElse("Unknown");
-        String staffName = staffUuid != null
-            ? playerService.getNameByUuid(staffUuid).orElse("CONSOLE")
-            : "CONSOLE";
+        // Try to get the online player for PlaceholderAPI support
+        Player onlinePlayer = Bukkit.getPlayer(playerUuid);
+        String playerName = onlinePlayer != null
+            ? playerService.getDisplayName(onlinePlayer)
+            : playerService.getNameByUuid(playerUuid).orElse("Unknown");
+
+        Player onlineStaff = staffUuid != null ? Bukkit.getPlayer(staffUuid) : null;
+        String staffName = onlineStaff != null
+            ? playerService.getDisplayName(onlineStaff)
+            : (staffUuid != null
+                ? playerService.getNameByUuid(staffUuid).orElse("CONSOLE")
+                : "CONSOLE");
 
         Component message = messageManager.get("undunced_broadcast", staffName, playerName);
 
@@ -161,6 +178,51 @@ public class DunceService {
      */
     public List<DunceRecord> getDunceHistory(UUID playerUuid) {
         return dunceRepository.getDunceHistory(playerUuid);
+    }
+
+    /**
+     * Send a message in Dunce Chat via command
+     * This is used by the /duncechat (/dc) command
+     */
+    public void sendDunceChatMessage(Player sender, String message) {
+        boolean isDunced = isDunced(sender.getUniqueId());
+        boolean inDunceChat = preferencesService.isInDunceChat(sender.getUniqueId());
+        boolean canSeeDunceChat = preferencesService.isDunceChatVisible(sender.getUniqueId());
+
+        // Get display name Components using PlaceholderAPI if configured (preserves colors)
+        Component displayNameComponent = playerService.getDisplayNameComponent(sender);
+        Component prefixComponent = playerService.getPrefixComponent(sender);
+
+        // Combine prefix and name into a single component
+        Component fullNameComponent = prefixComponent.append(displayNameComponent);
+
+        // Create placeholder map for MiniMessage
+        Map<String, Component> placeholders = new HashMap<>();
+        placeholders.put("player", fullNameComponent);
+        placeholders.put("message", Component.text(message));
+
+        // Determine message format based on sender status
+        Component formattedMessage;
+        if (isDunced) {
+            // Dunced player message - uses messages.properties format with Component placeholders
+            formattedMessage = messageManager.getWithComponents("dunce_chat_format", placeholders);
+        } else if (inDunceChat || canSeeDunceChat) {
+            // Staff/observer message - uses messages.properties format with Component placeholders
+            formattedMessage = messageManager.getWithComponents("dunce_chat_observer_format", placeholders);
+        } else {
+            // Should not happen due to command checks, but handle gracefully
+            sender.sendMessage(messageManager.get("no_permission"));
+            return;
+        }
+
+        // Send to all players who can see dunce chat
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (isDunced(online.getUniqueId()) ||
+                preferencesService.isInDunceChat(online.getUniqueId()) ||
+                preferencesService.isDunceChatVisible(online.getUniqueId())) {
+                online.sendMessage(formattedMessage);
+            }
+        }
     }
 }
 

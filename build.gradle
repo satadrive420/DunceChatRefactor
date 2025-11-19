@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'io.github.goooler.shadow' version '8.1.8'
     id("xyz.jpenilla.run-paper") version "2.3.1"
 }
 
@@ -21,6 +22,30 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.10-R0.1-SNAPSHOT")
     compileOnly 'me.clip:placeholderapi:2.11.7'
     implementation 'com.zaxxer:HikariCP:5.1.0'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'org.slf4j:slf4j-jdk14:2.0.9' // Bridge SLF4J to Java Util Logging
+    implementation 'com.h2database:h2:2.2.224'
+}
+
+// Configure shadow plugin to relocate HikariCP
+shadowJar {
+    archiveClassifier.set('')
+    relocate 'com.zaxxer.hikari', 'gg.corn.DunceChat.libs.hikari'
+    relocate 'org.slf4j', 'gg.corn.DunceChat.libs.slf4j'
+    // Note: H2 is NOT relocated because JDBC DriverManager needs to find it via SPI
+
+    // Merge service files to ensure JDBC drivers are registered
+    mergeServiceFiles()
+}
+
+// Use shadowJar as the default build artifact
+build {
+    dependsOn shadowJar
+}
+
+// Make the jar task depend on shadowJar
+jar {
+    enabled = false
 }
 
 tasks {

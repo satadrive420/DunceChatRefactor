@@ -18,13 +18,13 @@ import java.util.*;
 /**
  * Refactored dunce command using services
  */
-public class DunceCommandNew implements CommandExecutor, TabCompleter {
+public class DunceCommand implements CommandExecutor, TabCompleter {
 
     private final DunceService dunceService;
     private final PlayerService playerService;
     private final MessageManager messageManager;
 
-    public DunceCommandNew(DunceService dunceService, PlayerService playerService, MessageManager messageManager) {
+    public DunceCommand(DunceService dunceService, PlayerService playerService, MessageManager messageManager) {
         this.dunceService = dunceService;
         this.playerService = playerService;
         this.messageManager = messageManager;
