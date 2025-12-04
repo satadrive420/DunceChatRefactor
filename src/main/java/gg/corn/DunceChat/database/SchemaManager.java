@@ -19,13 +19,14 @@ public class SchemaManager {
     }
 
     /**
-     * Initialize the new schema
+     * Initialize the new schema (fresh install only)
+     * Creates all tables with version 3 structure directly
      */
     public void initializeSchema() {
         try (Connection conn = databaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
 
-            // Schema version tracking table
+            // First, ensure schema_version table exists
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS schema_version (
                     version INT PRIMARY KEY,
@@ -33,9 +34,19 @@ public class SchemaManager {
                 )
             """);
 
+            // Check if this is a fresh install
+            int currentVersion = getCurrentSchemaVersion();
+            if (currentVersion > 0) {
+                // Schema already initialized, nothing to do
+                return;
+            }
+
+            // Fresh install - create all tables with version 3 structure
+            logger.info("[DunceChat] No existing tables detected. Creating tables...");
+
             // Players table - central player information
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS players (
+                CREATE TABLE players (
                     uuid VARCHAR(36) PRIMARY KEY,
                     username VARCHAR(16) NOT NULL,
                     first_join TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -45,9 +56,9 @@ public class SchemaManager {
                 )
             """);
 
-            // Dunce records table - tracks all dunce actions
+            // Dunce records table - tracks all dunce actions (with trigger_message column)
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS dunce_records (
+                CREATE TABLE dunce_records (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     player_uuid VARCHAR(36) NOT NULL,
                     is_dunced BOOLEAN NOT NULL DEFAULT FALSE,
@@ -66,7 +77,7 @@ public class SchemaManager {
 
             // Player preferences table
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS player_preferences (
+                CREATE TABLE player_preferences (
                     player_uuid VARCHAR(36) PRIMARY KEY,
                     dunce_chat_visible BOOLEAN DEFAULT FALSE,
                     in_dunce_chat BOOLEAN DEFAULT FALSE,
@@ -74,9 +85,9 @@ public class SchemaManager {
                 )
             """);
 
-            // Pending messages table - stores messages for offline players
+            // Pending messages table
             stmt.execute("""
-                CREATE TABLE IF NOT EXISTS pending_messages (
+                CREATE TABLE pending_messages (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     player_uuid VARCHAR(36) NOT NULL,
                     message_key VARCHAR(255) NOT NULL,
@@ -86,8 +97,9 @@ public class SchemaManager {
                 )
             """);
 
-            logger.info("[DunceChat] Database schema initialized successfully!");
+            // Set schema version to 3
             updateSchemaVersion(CURRENT_SCHEMA_VERSION);
+            logger.info("[DunceChat] Database schema v3 initialized successfully!");
 
         } catch (SQLException e) {
             logger.severe("[DunceChat] Failed to initialize database schema!");
@@ -100,8 +112,6 @@ public class SchemaManager {
      */
     public void applySchemaUpgrades() {
         int currentVersion = getCurrentSchemaVersion();
-
-        logger.info("[DunceChat] Current schema version: " + currentVersion);
 
         if (currentVersion < CURRENT_SCHEMA_VERSION) {
             logger.info("[DunceChat] Upgrading schema from version " + currentVersion + " to " + CURRENT_SCHEMA_VERSION);
@@ -117,9 +127,8 @@ public class SchemaManager {
                 logger.severe("[DunceChat] Schema upgrade FAILED! Database may be in inconsistent state.");
                 logger.severe("[DunceChat] Please check the error above and fix manually if needed.");
             }
-        } else {
-            logger.info("[DunceChat] Schema is up to date (version " + currentVersion + ")");
         }
+        // No need to log when schema is up to date - it's the normal case
     }
 
     /**
@@ -421,15 +430,11 @@ public class SchemaManager {
              Statement stmt = conn.createStatement();
              var rs = stmt.executeQuery("SELECT MAX(version) as version FROM schema_version")) {
             if (rs.next()) {
-                int version = rs.getInt("version");
-                logger.info("[DunceChat] Read schema version from database: " + version);
-                return version;
+                return rs.getInt("version");
             }
-            logger.info("[DunceChat] No schema version found in database, defaulting to 0");
             return 0;
         } catch (SQLException e) {
             // Table might not exist yet
-            logger.info("[DunceChat] Could not read schema version (table may not exist), defaulting to 0");
             return 0;
         }
     }
