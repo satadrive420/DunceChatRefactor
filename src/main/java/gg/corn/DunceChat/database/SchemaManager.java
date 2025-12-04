@@ -324,13 +324,34 @@ public class SchemaManager {
     }
 
     /**
-     * Check if a table exists
+     * Check if a table exists in the current database
      */
     private boolean tableExists(Connection conn, String tableName) throws SQLException {
         var meta = conn.getMetaData();
-        try (var rs = meta.getTables(null, null, tableName, new String[]{"TABLE"})) {
-            return rs.next();
+        String catalog = conn.getCatalog(); // Get current database name
+
+        // Try with exact case
+        try (var rs = meta.getTables(catalog, null, tableName, new String[]{"TABLE"})) {
+            if (rs.next()) {
+                return true;
+            }
         }
+
+        // Try with uppercase (MySQL sometimes stores as uppercase)
+        try (var rs = meta.getTables(catalog, null, tableName.toUpperCase(), new String[]{"TABLE"})) {
+            if (rs.next()) {
+                return true;
+            }
+        }
+
+        // Try with lowercase
+        try (var rs = meta.getTables(catalog, null, tableName.toLowerCase(), new String[]{"TABLE"})) {
+            if (rs.next()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
