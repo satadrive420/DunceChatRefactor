@@ -106,15 +106,9 @@ public class SchemaManager {
         if (currentVersion < CURRENT_SCHEMA_VERSION) {
             logger.info("[DunceChat] Upgrading schema from version " + currentVersion + " to " + CURRENT_SCHEMA_VERSION);
 
-            boolean upgradeSuccess = false;
-
-            if (currentVersion < 2) {
-                upgradeSuccess = upgradeToVersion2();
-            }
-
-            if (currentVersion < 3 && (currentVersion >= 2 || upgradeSuccess)) {
-                upgradeSuccess = upgradeToVersion3();
-            }
+            // Note: We skip version 2 as it only existed in debug environments
+            // The migration from unversioned schema goes directly to version 3
+            boolean upgradeSuccess = upgradeToVersion3();
 
             if (upgradeSuccess) {
                 updateSchemaVersion(CURRENT_SCHEMA_VERSION);
@@ -129,18 +123,18 @@ public class SchemaManager {
     }
 
     /**
-     * Upgrade schema to version 2: Add trigger_message column
+     * Upgrade schema to version 3: Ensure trigger_message column and pending_messages table exist
+     * This upgrades directly from unversioned schema to version 3, skipping version 2
      * @return true if upgrade succeeded, false otherwise
      */
-    private boolean upgradeToVersion2() {
-        logger.info("[DunceChat] Applying schema upgrade to version 2...");
+    private boolean upgradeToVersion3() {
+        logger.info("[DunceChat] Applying schema upgrade to version 3...");
 
         try (Connection conn = databaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
 
+            // Ensure trigger_message column exists in dunce_records table
             logger.info("[DunceChat] Checking if trigger_message column exists in dunce_records table...");
-
-            // Add trigger_message column if it doesn't exist
             if (!columnExists(conn, "dunce_records", "trigger_message")) {
                 logger.info("[DunceChat] Column does not exist. Adding trigger_message column to dunce_records table...");
 
@@ -153,31 +147,8 @@ public class SchemaManager {
                 logger.info("[DunceChat] trigger_message column already exists, skipping.");
             }
 
-            return true;
-
-        } catch (SQLException e) {
-            logger.severe("[DunceChat] Failed to upgrade schema to version 2!");
-            logger.severe("[DunceChat] Error: " + e.getMessage());
-            logger.severe("[DunceChat] SQLState: " + e.getSQLState());
-            logger.severe("[DunceChat] Error Code: " + e.getErrorCode());
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    /**
-     * Upgrade schema to version 3: Add pending_messages table
-     * @return true if upgrade succeeded, false otherwise
-     */
-    private boolean upgradeToVersion3() {
-        logger.info("[DunceChat] Applying schema upgrade to version 3...");
-
-        try (Connection conn = databaseManager.getConnection();
-             Statement stmt = conn.createStatement()) {
-
+            // Ensure pending_messages table exists
             logger.info("[DunceChat] Checking if pending_messages table exists...");
-
-            // Add pending_messages table if it doesn't exist
             if (!tableExists(conn, "pending_messages")) {
                 logger.info("[DunceChat] Table does not exist. Creating pending_messages table...");
 
