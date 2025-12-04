@@ -12,14 +12,15 @@ commands:
   dunce:
     usage: /dunce <player> <duration> <reason>
     description: Central command for managing rule-breaking players.
+    permission: duncechat.admin
   duncechat:
     usage: /duncechat <message>
     aliases: [dc]
     description: Send a message in Dunce Chat
-    permission: duncechat.use
   clearchat:
     usage: /clearchat
     description: Clear the chat
+    permission: duncechat.admin
   dcoff:
     usage: /dcoff
     description: Hides the Unmoderated Chat.
@@ -29,6 +30,7 @@ commands:
   undunce:
     usage: /undunce <player>
     description: Undunce a player.
+    permission: duncechat.admin
   duncemenu:
     usage: /duncemenu
     description: Shows the DunceChat Menu.
@@ -36,6 +38,8 @@ commands:
     usage: /duncelookup <player>
     aliases: dl
     description: Look up details on a dunced player.
+    permission: duncechat.admin
   duncereload:
     usage: /duncereload
     description: Reloads the configuration.
+    permission: duncechat.admin

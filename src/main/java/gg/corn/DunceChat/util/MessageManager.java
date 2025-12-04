@@ -4,7 +4,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
 
@@ -144,13 +143,6 @@ public class MessageManager {
     public Component getWithComponents(String key, Map<String, Component> placeholders) {
         String message = getRaw(key);
 
-        // Debug logging
-        plugin.getLogger().info("[DEBUG] Message template: " + message);
-        for (Map.Entry<String, Component> entry : placeholders.entrySet()) {
-            plugin.getLogger().info("[DEBUG] Placeholder '" + entry.getKey() + "': " +
-                PlainTextComponentSerializer.plainText().serialize(entry.getValue()));
-        }
-
         TagResolver.Builder resolverBuilder = TagResolver.builder();
         resolverBuilder.resolvers(getColorResolvers());
 
@@ -158,9 +150,7 @@ public class MessageManager {
             resolverBuilder.resolver(Placeholder.component(entry.getKey(), entry.getValue()));
         }
 
-        Component result = miniMessage.deserialize(message, resolverBuilder.build());
-        plugin.getLogger().info("[DEBUG] Result: " + PlainTextComponentSerializer.plainText().serialize(result));
-        return result;
+        return miniMessage.deserialize(message, resolverBuilder.build());
     }
 
     /**

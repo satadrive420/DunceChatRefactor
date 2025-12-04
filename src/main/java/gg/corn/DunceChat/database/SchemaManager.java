@@ -11,7 +11,7 @@ import java.util.logging.Logger;
 public class SchemaManager {
 
     private final DatabaseManager databaseManager;
-    private static final int CURRENT_SCHEMA_VERSION = 1;
+    private static final int CURRENT_SCHEMA_VERSION = 3;
     private static final Logger logger = Logger.getLogger("DunceChat");
 
     public SchemaManager(DatabaseManager databaseManager) {
@@ -56,6 +56,7 @@ public class SchemaManager {
                     dunced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP NULL,
                     undunced_at TIMESTAMP NULL,
+                    trigger_message TEXT,
                     INDEX idx_player (player_uuid),
                     INDEX idx_active (player_uuid, is_dunced),
                     INDEX idx_expiry (expires_at),
@@ -73,12 +74,140 @@ public class SchemaManager {
                 )
             """);
 
+            // Pending messages table - stores messages for offline players
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS pending_messages (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    player_uuid VARCHAR(36) NOT NULL,
+                    message_key VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_player (player_uuid),
+                    FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+                )
+            """);
+
             logger.info("[DunceChat] Database schema initialized successfully!");
             updateSchemaVersion(CURRENT_SCHEMA_VERSION);
 
         } catch (SQLException e) {
             logger.severe("[DunceChat] Failed to initialize database schema!");
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Apply schema upgrades if needed
+     */
+    public void applySchemaUpgrades() {
+        int currentVersion = getCurrentSchemaVersion();
+
+        logger.info("[DunceChat] Current schema version: " + currentVersion);
+
+        if (currentVersion < CURRENT_SCHEMA_VERSION) {
+            logger.info("[DunceChat] Upgrading schema from version " + currentVersion + " to " + CURRENT_SCHEMA_VERSION);
+
+            boolean upgradeSuccess = false;
+
+            if (currentVersion < 2) {
+                upgradeSuccess = upgradeToVersion2();
+            }
+
+            if (currentVersion < 3 && (currentVersion >= 2 || upgradeSuccess)) {
+                upgradeSuccess = upgradeToVersion3();
+            }
+
+            if (upgradeSuccess) {
+                updateSchemaVersion(CURRENT_SCHEMA_VERSION);
+                logger.info("[DunceChat] Schema upgrade complete!");
+            } else {
+                logger.severe("[DunceChat] Schema upgrade FAILED! Database may be in inconsistent state.");
+                logger.severe("[DunceChat] Please check the error above and fix manually if needed.");
+            }
+        } else {
+            logger.info("[DunceChat] Schema is up to date (version " + currentVersion + ")");
+        }
+    }
+
+    /**
+     * Upgrade schema to version 2: Add trigger_message column
+     * @return true if upgrade succeeded, false otherwise
+     */
+    private boolean upgradeToVersion2() {
+        logger.info("[DunceChat] Applying schema upgrade to version 2...");
+
+        try (Connection conn = databaseManager.getConnection();
+             Statement stmt = conn.createStatement()) {
+
+            logger.info("[DunceChat] Checking if trigger_message column exists in dunce_records table...");
+
+            // Add trigger_message column if it doesn't exist
+            if (!columnExists(conn, "dunce_records", "trigger_message")) {
+                logger.info("[DunceChat] Column does not exist. Adding trigger_message column to dunce_records table...");
+
+                String alterSQL = "ALTER TABLE dunce_records ADD COLUMN trigger_message TEXT AFTER undunced_at";
+                logger.info("[DunceChat] Executing SQL: " + alterSQL);
+
+                stmt.execute(alterSQL);
+                logger.info("[DunceChat] Successfully added trigger_message column to dunce_records table.");
+            } else {
+                logger.info("[DunceChat] trigger_message column already exists, skipping.");
+            }
+
+            return true;
+
+        } catch (SQLException e) {
+            logger.severe("[DunceChat] Failed to upgrade schema to version 2!");
+            logger.severe("[DunceChat] Error: " + e.getMessage());
+            logger.severe("[DunceChat] SQLState: " + e.getSQLState());
+            logger.severe("[DunceChat] Error Code: " + e.getErrorCode());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Upgrade schema to version 3: Add pending_messages table
+     * @return true if upgrade succeeded, false otherwise
+     */
+    private boolean upgradeToVersion3() {
+        logger.info("[DunceChat] Applying schema upgrade to version 3...");
+
+        try (Connection conn = databaseManager.getConnection();
+             Statement stmt = conn.createStatement()) {
+
+            logger.info("[DunceChat] Checking if pending_messages table exists...");
+
+            // Add pending_messages table if it doesn't exist
+            if (!tableExists(conn, "pending_messages")) {
+                logger.info("[DunceChat] Table does not exist. Creating pending_messages table...");
+
+                String createSQL = """
+                    CREATE TABLE pending_messages (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        player_uuid VARCHAR(36) NOT NULL,
+                        message_key VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_player (player_uuid),
+                        FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+                    )
+                """;
+                logger.info("[DunceChat] Executing SQL: CREATE TABLE pending_messages...");
+
+                stmt.execute(createSQL);
+                logger.info("[DunceChat] Successfully created pending_messages table.");
+            } else {
+                logger.info("[DunceChat] pending_messages table already exists, skipping.");
+            }
+
+            return true;
+
+        } catch (SQLException e) {
+            logger.severe("[DunceChat] Failed to upgrade schema to version 3!");
+            logger.severe("[DunceChat] Error: " + e.getMessage());
+            logger.severe("[DunceChat] SQLState: " + e.getSQLState());
+            logger.severe("[DunceChat] Error Code: " + e.getErrorCode());
+            e.printStackTrace();
+            return false;
         }
     }
 
@@ -224,6 +353,49 @@ public class SchemaManager {
     }
 
     /**
+     * Check if a column exists in a table
+     */
+    private boolean columnExists(Connection conn, String tableName, String columnName) throws SQLException {
+        var meta = conn.getMetaData();
+
+        // Try with exact case first
+        try (var rs = meta.getColumns(null, null, tableName, columnName)) {
+            if (rs.next()) {
+                logger.info("[DunceChat] Column check: " + columnName + " exists in " + tableName);
+                return true;
+            }
+        }
+
+        // Try with uppercase table name (MySQL default)
+        try (var rs = meta.getColumns(null, null, tableName.toUpperCase(), columnName)) {
+            if (rs.next()) {
+                logger.info("[DunceChat] Column check: " + columnName + " exists in " + tableName.toUpperCase());
+                return true;
+            }
+        }
+
+        // Try with lowercase table name
+        try (var rs = meta.getColumns(null, null, tableName.toLowerCase(), columnName)) {
+            if (rs.next()) {
+                logger.info("[DunceChat] Column check: " + columnName + " exists in " + tableName.toLowerCase());
+                return true;
+            }
+        }
+
+        // Fallback: Use direct SQL query
+        try (Statement stmt = conn.createStatement()) {
+            String query = "SELECT " + columnName + " FROM " + tableName + " LIMIT 0";
+            stmt.executeQuery(query);
+            logger.info("[DunceChat] Column check (SQL): " + columnName + " exists in " + tableName);
+            return true;
+        } catch (SQLException e) {
+            // Column doesn't exist
+            logger.info("[DunceChat] Column check: " + columnName + " does NOT exist in " + tableName);
+            return false;
+        }
+    }
+
+    /**
      * Update schema version
      */
     private void updateSchemaVersion(int version) {
@@ -231,8 +403,10 @@ public class SchemaManager {
              Statement stmt = conn.createStatement()) {
             stmt.execute("INSERT INTO schema_version (version) VALUES (" + version + ") " +
                         "ON DUPLICATE KEY UPDATE version = " + version);
+            logger.info("[DunceChat] Updated schema version to " + version);
         } catch (SQLException e) {
-            logger.warning("[DunceChat] Failed to update schema version.");
+            logger.severe("[DunceChat] Failed to update schema version!");
+            logger.severe("[DunceChat] SQL Error: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -245,13 +419,17 @@ public class SchemaManager {
              Statement stmt = conn.createStatement();
              var rs = stmt.executeQuery("SELECT MAX(version) as version FROM schema_version")) {
             if (rs.next()) {
-                return rs.getInt("version");
+                int version = rs.getInt("version");
+                logger.info("[DunceChat] Read schema version from database: " + version);
+                return version;
             }
+            logger.info("[DunceChat] No schema version found in database, defaulting to 0");
+            return 0;
         } catch (SQLException e) {
             // Table might not exist yet
+            logger.info("[DunceChat] Could not read schema version (table may not exist), defaulting to 0");
             return 0;
         }
-        return 0;
     }
 }
 

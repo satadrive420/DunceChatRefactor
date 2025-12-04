@@ -78,6 +78,11 @@ public class LookupCommand implements CommandExecutor {
         sender.sendMessage(messageManager.get("lookup_marked_by", staffName));
         sender.sendMessage(messageManager.get("lookup_reason", reason));
 
+        // Show trigger message if it exists (for auto-dunces)
+        if (dunceRecord.getTriggerMessage() != null && !dunceRecord.getTriggerMessage().isEmpty()) {
+            sender.sendMessage(messageManager.get("lookup_trigger_message", dunceRecord.getTriggerMessage()));
+        }
+
         return true;
     }
 }

@@ -8,6 +8,7 @@ import gg.corn.DunceChat.listener.ChatListener;
 import gg.corn.DunceChat.listener.GUIListener;
 import gg.corn.DunceChat.listener.GreentextListener;
 import gg.corn.DunceChat.repository.DunceRepository;
+import gg.corn.DunceChat.repository.PendingMessageRepository;
 import gg.corn.DunceChat.repository.PlayerRepository;
 import gg.corn.DunceChat.repository.PreferencesRepository;
 import gg.corn.DunceChat.service.DunceService;
@@ -37,6 +38,7 @@ public class DunceChat extends JavaPlugin {
     // Repositories
     private PlayerRepository playerRepository;
     private DunceRepository dunceRepository;
+    private PendingMessageRepository pendingMessageRepository;
     private PreferencesRepository preferencesRepository;
 
     // Services
@@ -139,6 +141,7 @@ public class DunceChat extends JavaPlugin {
             getLogger().info("Initializing database schema...");
             schemaManager = new SchemaManager(databaseManager);
             schemaManager.initializeSchema();
+            schemaManager.applySchemaUpgrades();
             getLogger().info("Database schema initialized!");
 
             // Auto-migrate if enabled
@@ -162,6 +165,7 @@ public class DunceChat extends JavaPlugin {
     private void initializeRepositories() {
         playerRepository = new PlayerRepository(databaseManager);
         dunceRepository = new DunceRepository(databaseManager);
+        pendingMessageRepository = new PendingMessageRepository(databaseManager);
 
         boolean defaultVisibility = getConfig().getBoolean("visible-by-default", false);
         preferencesRepository = new PreferencesRepository(databaseManager, defaultVisibility);
@@ -175,7 +179,7 @@ public class DunceChat extends JavaPlugin {
     private void initializeServices() {
         playerService = new PlayerService(playerRepository, getConfig());
         preferencesService = new PreferencesService(preferencesRepository);
-        dunceService = new DunceService(dunceRepository, playerService, preferencesService, messageManager);
+        dunceService = new DunceService(dunceRepository, pendingMessageRepository, playerService, preferencesService, messageManager);
 
         getLogger().info("Services initialized.");
     }
@@ -196,7 +200,7 @@ public class DunceChat extends JavaPlugin {
         Objects.requireNonNull(getCommand("duncechat")).setExecutor(dunceChatCommand);
 
         // Toggle commands
-        ToggleCommand toggleCommand = new ToggleCommand(preferencesService, messageManager);
+        ToggleCommand toggleCommand = new ToggleCommand(dunceService, preferencesService, messageManager);
         Objects.requireNonNull(getCommand("dcon")).setExecutor(toggleCommand);
         Objects.requireNonNull(getCommand("dcoff")).setExecutor(toggleCommand);
 
@@ -225,7 +229,7 @@ public class DunceChat extends JavaPlugin {
             new GreentextListener(this),
             this);
         getServer().getPluginManager().registerEvents(
-            new GUIListener(dunceService, preferencesService, this),
+            new GUIListener(dunceService, preferencesService, messageManager, this),
             this);
 
         getLogger().info("Event listeners registered.");

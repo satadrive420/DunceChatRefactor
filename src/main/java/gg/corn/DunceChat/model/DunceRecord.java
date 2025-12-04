@@ -15,6 +15,7 @@ public class DunceRecord {
     private Timestamp duncedAt;
     private Timestamp expiresAt;
     private Timestamp unduncedAt;
+    private String triggerMessage;
 
     public DunceRecord(UUID playerUuid) {
         this.playerUuid = playerUuid;
@@ -22,7 +23,7 @@ public class DunceRecord {
     }
 
     public DunceRecord(int id, UUID playerUuid, boolean isDunced, String reason,
-                      UUID staffUuid, Timestamp duncedAt, Timestamp expiresAt, Timestamp unduncedAt) {
+                      UUID staffUuid, Timestamp duncedAt, Timestamp expiresAt, Timestamp unduncedAt, String triggerMessage) {
         this.id = id;
         this.playerUuid = playerUuid;
         this.isDunced = isDunced;
@@ -31,6 +32,7 @@ public class DunceRecord {
         this.duncedAt = duncedAt;
         this.expiresAt = expiresAt;
         this.unduncedAt = unduncedAt;
+        this.triggerMessage = triggerMessage;
     }
 
     public int getId() {
@@ -91,6 +93,14 @@ public class DunceRecord {
 
     public void setUnduncedAt(Timestamp unduncedAt) {
         this.unduncedAt = unduncedAt;
+    }
+
+    public String getTriggerMessage() {
+        return triggerMessage;
+    }
+
+    public void setTriggerMessage(String triggerMessage) {
+        this.triggerMessage = triggerMessage;
     }
 
     /**

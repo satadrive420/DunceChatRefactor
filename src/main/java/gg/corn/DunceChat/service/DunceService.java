@@ -2,6 +2,7 @@ package gg.corn.DunceChat.service;
 
 import gg.corn.DunceChat.model.DunceRecord;
 import gg.corn.DunceChat.repository.DunceRepository;
+import gg.corn.DunceChat.repository.PendingMessageRepository;
 import gg.corn.DunceChat.util.MessageManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -18,15 +19,18 @@ import java.util.logging.Logger;
 public class DunceService {
 
     private final DunceRepository dunceRepository;
+    private final PendingMessageRepository pendingMessageRepository;
     private final PlayerService playerService;
     private final PreferencesService preferencesService;
     private final MessageManager messageManager;
     private static final SimpleDateFormat DATE_FORMATTER = new SimpleDateFormat("yyyy/MM/dd HH:mm");
     private static final Logger logger = Logger.getLogger("DunceChat");
 
-    public DunceService(DunceRepository dunceRepository, PlayerService playerService,
-                       PreferencesService preferencesService, MessageManager messageManager) {
+    public DunceService(DunceRepository dunceRepository, PendingMessageRepository pendingMessageRepository,
+                       PlayerService playerService, PreferencesService preferencesService,
+                       MessageManager messageManager) {
         this.dunceRepository = dunceRepository;
+        this.pendingMessageRepository = pendingMessageRepository;
         this.playerService = playerService;
         this.preferencesService = preferencesService;
         this.messageManager = messageManager;
@@ -58,7 +62,7 @@ public class DunceService {
     /**
      * Dunce a player
      */
-    public void duncePlayer(UUID playerUuid, String reason, UUID staffUuid, Timestamp expiresAt) {
+    public void duncePlayer(UUID playerUuid, String reason, UUID staffUuid, Timestamp expiresAt, String triggerMessage) {
         // Check if already dunced
         Optional<DunceRecord> existingRecord = dunceRepository.getActiveDunceRecord(playerUuid);
         if (existingRecord.isPresent() && existingRecord.get().isDunced()) {
@@ -72,6 +76,7 @@ public class DunceService {
         record.setStaffUuid(staffUuid);
         record.setDuncedAt(new Timestamp(System.currentTimeMillis()));
         record.setExpiresAt(expiresAt);
+        record.setTriggerMessage(triggerMessage);
 
         dunceRepository.create(record);
 
@@ -85,8 +90,11 @@ public class DunceService {
 
     /**
      * Undunce a player
+     * @param playerUuid The player to undunce
+     * @param staffUuid The staff member who undunced (null for auto-expiry)
+     * @param isExpiry True if this is from auto-expiry, false if staff action
      */
-    public void unduncePlayer(UUID playerUuid, UUID staffUuid) {
+    public void unduncePlayer(UUID playerUuid, UUID staffUuid, boolean isExpiry) {
         Optional<DunceRecord> record = dunceRepository.getActiveDunceRecord(playerUuid);
         if (record.isEmpty() || !record.get().isDunced()) {
             return; // Not dunced
@@ -95,8 +103,13 @@ public class DunceService {
         dunceRepository.undunce(playerUuid);
         preferencesService.setInDunceChat(playerUuid, false);
 
-        // Broadcast undunce message
-        broadcastUndunceMessage(playerUuid, staffUuid);
+        if (isExpiry) {
+            // Send expiry message to player (or store for later if offline)
+            sendDunceExpiryMessage(playerUuid);
+        } else {
+            // Broadcast undunce message for staff actions
+            broadcastUndunceMessage(playerUuid, staffUuid);
+        }
     }
 
     /**
@@ -106,7 +119,7 @@ public class DunceService {
         List<DunceRecord> expiredRecords = dunceRepository.getExpiredDunceRecords();
 
         for (DunceRecord record : expiredRecords) {
-            unduncePlayer(record.getPlayerUuid(), null);
+            unduncePlayer(record.getPlayerUuid(), null, true);  // true = expired
 
             String playerName = playerService.getNameByUuid(record.getPlayerUuid())
                     .orElse("Unknown");
@@ -174,6 +187,50 @@ public class DunceService {
     }
 
     /**
+     * Send dunce expiry message to player (or store for later if offline)
+     */
+    private void sendDunceExpiryMessage(UUID playerUuid) {
+        Player player = Bukkit.getPlayer(playerUuid);
+
+        if (player != null && player.isOnline()) {
+            // Player is online, send message directly
+            player.sendMessage(messageManager.get("dunce_expired"));
+            logger.info("[DunceChat] Sent dunce expiry message to online player: " + player.getName());
+        } else {
+            // Player is offline, store message for later
+            pendingMessageRepository.addPendingMessage(playerUuid, "dunce_expired");
+            String playerName = playerService.getNameByUuid(playerUuid).orElse("Unknown");
+            logger.info("[DunceChat] Stored dunce expiry message for offline player: " + playerName);
+        }
+    }
+
+    /**
+     * Send all pending messages to a player on login
+     */
+    public void sendPendingMessages(UUID playerUuid) {
+        List<String> messageKeys = pendingMessageRepository.getPendingMessages(playerUuid);
+
+        if (messageKeys.isEmpty()) {
+            return;
+        }
+
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+
+        for (String messageKey : messageKeys) {
+            Component message = messageManager.get(messageKey);
+            player.sendMessage(message);
+        }
+
+        // Delete the messages after sending
+        pendingMessageRepository.deletePendingMessages(playerUuid);
+
+        logger.info("[DunceChat] Sent " + messageKeys.size() + " pending message(s) to " + player.getName());
+    }
+
+    /**
      * Get dunce history for a player
      */
     public List<DunceRecord> getDunceHistory(UUID playerUuid) {
@@ -225,4 +282,3 @@ public class DunceService {
         }
     }
 }
-

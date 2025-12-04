@@ -5,6 +5,7 @@ import gg.corn.DunceChat.model.DunceRecord;
 
 import java.sql.*;
 import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * Repository for dunce record data access
@@ -12,6 +13,7 @@ import java.util.*;
 public class DunceRepository {
 
     private final DatabaseManager databaseManager;
+    private static final Logger logger = Logger.getLogger("DunceChat");
 
     public DunceRepository(DatabaseManager databaseManager) {
         this.databaseManager = databaseManager;
@@ -89,8 +91,8 @@ public class DunceRepository {
      */
     public DunceRecord create(DunceRecord record) {
         String query = """
-            INSERT INTO dunce_records (player_uuid, is_dunced, reason, staff_uuid, dunced_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO dunce_records (player_uuid, is_dunced, reason, staff_uuid, dunced_at, expires_at, trigger_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """;
 
         try (Connection conn = databaseManager.getConnection();
@@ -102,6 +104,7 @@ public class DunceRepository {
             stmt.setString(4, record.getStaffUuid() != null ? record.getStaffUuid().toString() : null);
             stmt.setTimestamp(5, record.getDuncedAt());
             stmt.setTimestamp(6, record.getExpiresAt());
+            stmt.setString(7, record.getTriggerMessage());
 
             stmt.executeUpdate();
 
@@ -111,6 +114,10 @@ public class DunceRepository {
             }
 
         } catch (SQLException e) {
+            logger.severe("[DunceChat] Failed to create dunce record!");
+            logger.severe("[DunceChat] SQL Error: " + e.getMessage());
+            logger.severe("[DunceChat] This is likely because the trigger_message column is missing.");
+            logger.severe("[DunceChat] Please restart the server or run /duncemigrate to upgrade the schema.");
             e.printStackTrace();
         }
 
@@ -205,7 +212,8 @@ public class DunceRepository {
             staffUuid,
             rs.getTimestamp("dunced_at"),
             rs.getTimestamp("expires_at"),
-            rs.getTimestamp("undunced_at")
+            rs.getTimestamp("undunced_at"),
+            rs.getString("trigger_message")
         );
     }
 }

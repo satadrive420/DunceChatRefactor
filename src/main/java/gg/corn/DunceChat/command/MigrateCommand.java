@@ -42,6 +42,11 @@ public class MigrateCommand implements CommandExecutor {
         // Run migration asynchronously
         new Thread(() -> {
             try {
+                // First apply schema upgrades
+                sender.sendMessage("§e[DunceChat] Applying schema upgrades...");
+                schemaManager.applySchemaUpgrades();
+
+                // Then migrate from old schema if needed
                 boolean success = schemaManager.migrateFromOldSchema();
 
                 if (success) {

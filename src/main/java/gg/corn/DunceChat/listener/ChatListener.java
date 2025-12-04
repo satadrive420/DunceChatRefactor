@@ -18,7 +18,9 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -50,6 +52,9 @@ public class ChatListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         playerService.handlePlayerJoin(event.getPlayer());
+
+        // Send any pending messages (like dunce expiry notifications)
+        dunceService.sendPendingMessages(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
@@ -62,52 +67,40 @@ public class ChatListener implements Listener {
         Player player = event.getPlayer();
         UUID playerUuid = player.getUniqueId();
 
-        Component playerNameComponent = playerService.getDisplayNameComponent(player);
+        Component displayNameComponent = playerService.getDisplayNameComponent(player);
         Component prefixComponent = playerService.getPrefixComponent(player);
 
-        String duncedPrefixText = config.getString("dunced-prefix", "Dunced");
-        String unmoderatedPrefixText = config.getString("unmoderated-chat-prefix", "UC");
-
-        Component duncedPrefix = Component.text("[")
-                .color(net.kyori.adventure.text.format.NamedTextColor.DARK_GRAY)
-                .append(Component.text(duncedPrefixText).color(net.kyori.adventure.text.format.NamedTextColor.GOLD))
-                .append(Component.text("]").color(net.kyori.adventure.text.format.NamedTextColor.DARK_GRAY));
-
-        Component unmoderatedPrefix = Component.text("[")
-                .color(net.kyori.adventure.text.format.NamedTextColor.DARK_GRAY)
-                .append(Component.text(unmoderatedPrefixText).color(net.kyori.adventure.text.format.NamedTextColor.GOLD))
-                .append(Component.text("]").color(net.kyori.adventure.text.format.NamedTextColor.DARK_GRAY));
+        // Combine prefix and name into a single component
+        Component fullNameComponent = prefixComponent.append(displayNameComponent);
 
         if (dunceService.isDunced(playerUuid)) {
-            // Handle dunced player chat
+            // Handle dunced player chat - use dunce_chat_format
             Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
             event.viewers().retainAll(recipients);
 
-            Component message = Component.text("<")
-                    .append(duncedPrefix)
-                    .append(prefixComponent)
-                    .append(playerNameComponent)
-                    .append(Component.text("> "))
-                    .append(event.message());
+            // Create placeholder map for MiniMessage
+            Map<String, Component> placeholders = new HashMap<>();
+            placeholders.put("player", fullNameComponent);
+            placeholders.put("message", event.message());
 
+            Component message = messageManager.getWithComponents("dunce_chat_format", placeholders);
             event.renderer((source, sourceDisplayName, msg, viewer) -> message);
 
             logger.info(PlainTextComponentSerializer.plainText().serialize(message));
 
         } else if (preferencesService.isInDunceChat(playerUuid)) {
-            // Handle unmoderated chat
+            // Handle staff/observer in dunce chat - use dunce_chat_observer_format
             Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
             recipients.add(player);
 
             event.viewers().retainAll(recipients);
 
-            Component message = Component.text("<")
-                    .append(unmoderatedPrefix)
-                    .append(prefixComponent)
-                    .append(playerNameComponent)
-                    .append(Component.text("> "))
-                    .append(event.message());
+            // Create placeholder map for MiniMessage
+            Map<String, Component> placeholders = new HashMap<>();
+            placeholders.put("player", fullNameComponent);
+            placeholders.put("message", event.message());
 
+            Component message = messageManager.getWithComponents("dunce_chat_observer_format", placeholders);
             event.renderer((source, sourceDisplayName, msg, viewer) -> message);
 
             logger.info(PlainTextComponentSerializer.plainText().serialize(message));
@@ -141,13 +134,15 @@ public class ChatListener implements Listener {
         }
 
         String message = PlainTextComponentSerializer.plainText().serialize(event.message()).toLowerCase();
+        String originalMessage = PlainTextComponentSerializer.plainText().serialize(event.message());
 
         for (String word : disallowedWords) {
             if (message.contains(word.toLowerCase())) {
                 UUID playerUuid = player.getUniqueId();
 
                 if (!dunceService.isDunced(playerUuid)) {
-                    dunceService.duncePlayer(playerUuid, "AutoDunced", null, null);
+                    // Auto-dunce with the trigger message stored
+                    dunceService.duncePlayer(playerUuid, "AutoDunced", null, null, originalMessage);
                 }
 
                 event.setCancelled(true);

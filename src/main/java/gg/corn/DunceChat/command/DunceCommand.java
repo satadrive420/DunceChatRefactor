@@ -99,7 +99,7 @@ public class DunceCommand implements CommandExecutor, TabCompleter {
 
         // Dunce the player
         UUID staffUuid = sender instanceof Player ? ((Player) sender).getUniqueId() : null;
-        dunceService.duncePlayer(targetUuid.get(), reason, staffUuid, expiry);
+        dunceService.duncePlayer(targetUuid.get(), reason, staffUuid, expiry, null);
     }
 
     private void handleUndunceCommand(CommandSender sender, String[] args) {
@@ -126,8 +126,7 @@ public class DunceCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        UUID staffUuid = sender instanceof Player ? ((Player) sender).getUniqueId() : null;
-        dunceService.unduncePlayer(targetUuid.get(), staffUuid);
+        UUID staffUuid = sender instanceof Player ? ((Player) sender).getUniqueId() : null;dunceService.unduncePlayer(targetUuid.get(), staffUuid, false);  // false = staff action
     }
 
     private void sendAdminHelp(CommandSender sender) {

@@ -2,8 +2,8 @@ package gg.corn.DunceChat.listener;
 
 import gg.corn.DunceChat.service.DunceService;
 import gg.corn.DunceChat.service.PreferencesService;
+import gg.corn.DunceChat.util.MessageManager;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -23,12 +23,14 @@ public class GUIListener implements Listener {
 
     private final DunceService dunceService;
     private final PreferencesService preferencesService;
+    private final MessageManager messageManager;
     private final NamespacedKey dunceVisibility;
     private final NamespacedKey talkingInDunceChat;
 
-    public GUIListener(DunceService dunceService, PreferencesService preferencesService, Plugin plugin) {
+    public GUIListener(DunceService dunceService, PreferencesService preferencesService, MessageManager messageManager, Plugin plugin) {
         this.dunceService = dunceService;
         this.preferencesService = preferencesService;
+        this.messageManager = messageManager;
         this.dunceVisibility = new NamespacedKey(plugin, "dunce-visibility");
         this.talkingInDunceChat = new NamespacedKey(plugin, "talking-in-dunce-chat");
     }
@@ -57,6 +59,14 @@ public class GUIListener implements Listener {
 
         // Check for visibility toggle
         if (meta.getPersistentDataContainer().has(dunceVisibility, PersistentDataType.STRING)) {
+            // Dunced players cannot hide dunce chat
+            if (dunceService.isDunced(player.getUniqueId()) && preferencesService.isDunceChatVisible(player.getUniqueId())) {
+                player.sendMessage(messageManager.get("dunce_chat_forced_visible"));
+                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+                player.closeInventory();
+                return;
+            }
+
             preferencesService.toggleDunceChatVisibility(player.getUniqueId());
             player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
             // Refresh GUI

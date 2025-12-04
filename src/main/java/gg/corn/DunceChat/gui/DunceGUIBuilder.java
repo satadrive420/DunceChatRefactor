@@ -6,7 +6,6 @@ import gg.corn.DunceChat.service.PlayerService;
 import gg.corn.DunceChat.service.PreferencesService;
 import gg.corn.DunceChat.util.MessageManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -52,8 +51,10 @@ public class DunceGUIBuilder {
         );
 
         if (dunceService.isDunced(player.getUniqueId())) {
+            // Dunced players only see dunce info
             inventory.addItem(createDunceInfoItem(player));
         } else {
+            // Non-dunced players see: visibility toggle and chat toggle
             inventory.addItem(createVisibilityToggleItem(player));
             inventory.addItem(createChatToggleItem(player));
         }
@@ -65,7 +66,7 @@ public class DunceGUIBuilder {
         Optional<DunceRecord> recordOpt = dunceService.getActiveDunceRecord(player.getUniqueId());
 
         if (recordOpt.isEmpty()) {
-            return new ItemStack(Material.BARRIER);
+            return new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         }
 
         DunceRecord record = recordOpt.get();
@@ -82,13 +83,18 @@ public class DunceGUIBuilder {
             DATE_FORMATTER.format(record.getExpiresAt()) : messageManager.getRaw("dunce_expires_never");
         lore.add(messageManager.get("gui_expires_on", expiryDate));
 
-        if (record.getStaffUuid() != null) {
-            String staffName = playerService.getNameByUuid(record.getStaffUuid()).orElse("Unknown");
-            lore.add(messageManager.get("gui_marked_by", staffName));
-        }
+        // Show who dunced the player (CONSOLE if staffUuid is null)
+        String staffName = record.getStaffUuid() != null ?
+            playerService.getNameByUuid(record.getStaffUuid()).orElse("Unknown") : "CONSOLE";
+        lore.add(messageManager.get("gui_marked_by", staffName));
 
         if (record.getReason() != null) {
             lore.add(messageManager.get("gui_reason", record.getReason()));
+        }
+
+        // Show trigger message if it exists (for auto-dunces)
+        if (record.getTriggerMessage() != null && !record.getTriggerMessage().isEmpty()) {
+            lore.add(messageManager.get("gui_trigger_message", record.getTriggerMessage()));
         }
 
         meta.displayName(messageManager.get("gui_dunced_title"));
@@ -100,13 +106,21 @@ public class DunceGUIBuilder {
 
     private ItemStack createVisibilityToggleItem(Player player) {
         boolean visible = preferencesService.isDunceChatVisible(player.getUniqueId());
+        boolean isDunced = dunceService.isDunced(player.getUniqueId());
 
         Material material = visible ? Material.ORANGE_STAINED_GLASS_PANE : Material.RED_STAINED_GLASS_PANE;
         ItemStack item = new ItemStack(material, 1);
         ItemMeta meta = item.getItemMeta();
 
         String titleKey = visible ? "gui_chat_visible" : "gui_chat_hidden";
-        String loreKey = visible ? "gui_chat_visible_lore" : "gui_chat_hidden_lore";
+        String loreKey;
+
+        if (isDunced) {
+            // Dunced players always have visibility on and cannot toggle it
+            loreKey = "gui_chat_visible_lore_dunced";
+        } else {
+            loreKey = visible ? "gui_chat_visible_lore" : "gui_chat_hidden_lore";
+        }
 
         meta.displayName(messageManager.get(titleKey));
         meta.lore(List.of(messageManager.get(loreKey)));

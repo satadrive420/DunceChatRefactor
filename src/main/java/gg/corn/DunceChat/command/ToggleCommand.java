@@ -1,5 +1,6 @@
 package gg.corn.DunceChat.command;
 
+import gg.corn.DunceChat.service.DunceService;
 import gg.corn.DunceChat.service.PreferencesService;
 import gg.corn.DunceChat.util.MessageManager;
 import org.bukkit.command.Command;
@@ -13,10 +14,12 @@ import org.jetbrains.annotations.NotNull;
  */
 public class ToggleCommand implements CommandExecutor {
 
+    private final DunceService dunceService;
     private final PreferencesService preferencesService;
     private final MessageManager messageManager;
 
-    public ToggleCommand(PreferencesService preferencesService, MessageManager messageManager) {
+    public ToggleCommand(DunceService dunceService, PreferencesService preferencesService, MessageManager messageManager) {
+        this.dunceService = dunceService;
         this.preferencesService = preferencesService;
         this.messageManager = messageManager;
     }
@@ -32,6 +35,12 @@ public class ToggleCommand implements CommandExecutor {
             String status = messageManager.getRaw("dunce_chat_shown");
             player.sendMessage(messageManager.get("dunce_chat_visible", status));
         } else if (label.equalsIgnoreCase("dcoff")) {
+            // Dunced players cannot hide dunce chat
+            if (dunceService.isDunced(player.getUniqueId())) {
+                player.sendMessage(messageManager.get("dunce_chat_forced_visible"));
+                return true;
+            }
+
             preferencesService.setDunceChatVisible(player.getUniqueId(), false);
             String status = messageManager.getRaw("dunce_chat_hidden");
             player.sendMessage(messageManager.get("dunce_chat_visible", status));

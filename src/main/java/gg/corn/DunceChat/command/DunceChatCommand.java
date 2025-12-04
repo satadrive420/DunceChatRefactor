@@ -35,11 +35,6 @@ public class DunceChatCommand implements CommandExecutor {
             return true;
         }
 
-        // Check if player has permission to use dunce chat
-        if (!player.hasPermission("duncechat.use")) {
-            sender.sendMessage(messageManager.get("no_permission"));
-            return true;
-        }
 
         // Check if message provided
         if (args.length == 0) {
