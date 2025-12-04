@@ -55,7 +55,7 @@ public class DunceChat extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        getLogger().info("DunceChat v" + getDescription().getVersion() + " is loading...");
+        getLogger().info("DunceChat v" + getPluginMeta().getVersion() + " is loading...");
 
         // Ensure data folder exists
         if (!getDataFolder().exists()) {
@@ -90,7 +90,7 @@ public class DunceChat extends JavaPlugin {
         // Start expiry checker
         startExpiryChecker();
 
-        getLogger().info("DunceChat v" + getDescription().getVersion() + " loaded successfully!");
+        getLogger().info("DunceChat v" + getPluginMeta().getVersion() + " loaded successfully!");
     }
 
     @Override
@@ -98,7 +98,7 @@ public class DunceChat extends JavaPlugin {
         if (databaseManager != null) {
             databaseManager.close();
         }
-        getLogger().info("DunceChat v" + getDescription().getVersion() + " disabled.");
+        getLogger().info("DunceChat v" + getPluginMeta().getVersion() + " disabled.");
     }
 
     /**

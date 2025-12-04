@@ -106,17 +106,6 @@ public class ChatListener implements Listener {
             logger.info(PlainTextComponentSerializer.plainText().serialize(message));
         }
 
-        // Add dunce star if enabled
-        if (config.getBoolean("dunceStar", false)) {
-            if (!dunceService.isDunced(playerUuid) && preferencesService.isDunceChatVisible(playerUuid)) {
-                // Use renderer to add the star to the player name
-                event.renderer((source, sourceDisplayName, msg, viewer) -> {
-                    Component nameWithStar = sourceDisplayName.append(Component.text("*")
-                            .color(net.kyori.adventure.text.format.NamedTextColor.GREEN));
-                    return Component.translatable("chat.type.text", nameWithStar, msg);
-                });
-            }
-        }
     }
 
     @EventHandler(priority = EventPriority.LOW)
