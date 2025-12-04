@@ -212,6 +212,21 @@ public class SchemaManager {
     }
 
     /**
+     * Check if old schema tables exist that need migration
+     */
+    public boolean needsMigration() {
+        try (Connection conn = databaseManager.getConnection()) {
+            return tableExists(conn, "users") ||
+                   tableExists(conn, "dunced_players") ||
+                   tableExists(conn, "dunce_visible") ||
+                   tableExists(conn, "dunce_chat");
+        } catch (SQLException e) {
+            logger.info("[DunceChat] Could not check for old schema tables: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Migrate from old schema to new schema
      */
     public boolean migrateFromOldSchema() {
@@ -220,11 +235,6 @@ public class SchemaManager {
         try (Connection conn = databaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
 
-            // Check if old tables exist
-            if (!tableExists(conn, "users") && !tableExists(conn, "dunced_players")) {
-                logger.info("[DunceChat] No old schema detected, skipping migration.");
-                return true;
-            }
 
             // Migrate users to players table
             if (tableExists(conn, "users")) {

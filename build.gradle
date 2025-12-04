@@ -5,7 +5,6 @@ plugins {
 }
 
 group = 'gg.corn'
-version = '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()

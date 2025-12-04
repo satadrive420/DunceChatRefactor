@@ -55,7 +55,7 @@ public class DunceChat extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        getLogger().info("Starting DunceChat with clean architecture...");
+        getLogger().info("DunceChat v" + getDescription().getVersion() + " is loading...");
 
         // Ensure data folder exists
         if (!getDataFolder().exists()) {
@@ -90,7 +90,7 @@ public class DunceChat extends JavaPlugin {
         // Start expiry checker
         startExpiryChecker();
 
-        getLogger().info("DunceChat enabled successfully with clean architecture!");
+        getLogger().info("DunceChat v" + getDescription().getVersion() + " loaded successfully!");
     }
 
     @Override
@@ -98,7 +98,7 @@ public class DunceChat extends JavaPlugin {
         if (databaseManager != null) {
             databaseManager.close();
         }
-        getLogger().info("DunceChat disabled.");
+        getLogger().info("DunceChat v" + getDescription().getVersion() + " disabled.");
     }
 
     /**
@@ -144,10 +144,14 @@ public class DunceChat extends JavaPlugin {
             schemaManager.applySchemaUpgrades();
             getLogger().info("Database schema initialized!");
 
-            // Auto-migrate if enabled
+            // Auto-migrate if enabled and old tables exist
             if (getConfig().getBoolean("auto-migrate", true)) {
-                getLogger().info("Auto-migration enabled, checking for old schema...");
-                schemaManager.migrateFromOldSchema();
+                if (schemaManager.needsMigration()) {
+                    getLogger().info("Old schema detected, starting migration...");
+                    schemaManager.migrateFromOldSchema();
+                } else {
+                    getLogger().info("No old schema detected, skipping migration.");
+                }
             }
 
             getLogger().info("=== Database Initialization Complete ===");
