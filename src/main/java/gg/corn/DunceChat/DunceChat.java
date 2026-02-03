@@ -9,9 +9,11 @@ import gg.corn.DunceChat.listener.GUIListener;
 import gg.corn.DunceChat.listener.GreentextListener;
 import gg.corn.DunceChat.repository.DunceRepository;
 import gg.corn.DunceChat.repository.PendingMessageRepository;
+import gg.corn.DunceChat.repository.PlayerIPRepository;
 import gg.corn.DunceChat.repository.PlayerRepository;
 import gg.corn.DunceChat.repository.PreferencesRepository;
 import gg.corn.DunceChat.service.DunceService;
+import gg.corn.DunceChat.service.IPTrackingService;
 import gg.corn.DunceChat.service.PlayerService;
 import gg.corn.DunceChat.service.PreferencesService;
 import gg.corn.DunceChat.util.MessageManager;
@@ -40,11 +42,13 @@ public class DunceChat extends JavaPlugin {
     private DunceRepository dunceRepository;
     private PendingMessageRepository pendingMessageRepository;
     private PreferencesRepository preferencesRepository;
+    private PlayerIPRepository playerIPRepository;
 
     // Services
     private PlayerService playerService;
     private DunceService dunceService;
     private PreferencesService preferencesService;
+    private IPTrackingService ipTrackingService;
 
     // Utilities
     private MessageManager messageManager;
@@ -170,6 +174,7 @@ public class DunceChat extends JavaPlugin {
         playerRepository = new PlayerRepository(databaseManager);
         dunceRepository = new DunceRepository(databaseManager);
         pendingMessageRepository = new PendingMessageRepository(databaseManager);
+        playerIPRepository = new PlayerIPRepository(databaseManager);
 
         boolean defaultVisibility = getConfig().getBoolean("visible-by-default", false);
         preferencesRepository = new PreferencesRepository(databaseManager, defaultVisibility);
@@ -183,7 +188,15 @@ public class DunceChat extends JavaPlugin {
     private void initializeServices() {
         playerService = new PlayerService(playerRepository, getConfig());
         preferencesService = new PreferencesService(preferencesRepository);
-        dunceService = new DunceService(dunceRepository, pendingMessageRepository, playerService, preferencesService, messageManager);
+        dunceService = new DunceService(dunceRepository, pendingMessageRepository, playerIPRepository,
+                                       playerService, preferencesService, messageManager);
+        ipTrackingService = new IPTrackingService(playerIPRepository, playerService, dunceService,
+                                                  messageManager, getConfig());
+
+        // Initialize dunce cache if database is available
+        if (databaseManager != null && databaseManager.isInitialized()) {
+            dunceService.initializeCache();
+        }
 
         getLogger().info("Services initialized.");
     }
@@ -199,8 +212,20 @@ public class DunceChat extends JavaPlugin {
         Objects.requireNonNull(getCommand("undunce")).setExecutor(dunceCommand);
         Objects.requireNonNull(getCommand("undunce")).setTabCompleter(dunceCommand);
 
-        // Dunce Chat message command
-        DunceChatCommand dunceChatCommand = new DunceChatCommand(dunceService, preferencesService, messageManager);
+        // IP Dunce/Undunce commands
+        IPDunceCommand ipDunceCommand = new IPDunceCommand(dunceService, playerService, messageManager);
+        Objects.requireNonNull(getCommand("dunceip")).setExecutor(ipDunceCommand);
+        Objects.requireNonNull(getCommand("dunceip")).setTabCompleter(ipDunceCommand);
+        Objects.requireNonNull(getCommand("undunceip")).setExecutor(ipDunceCommand);
+        Objects.requireNonNull(getCommand("undunceip")).setTabCompleter(ipDunceCommand);
+
+        // IP History command
+        IPHistoryCommand ipHistoryCommand = new IPHistoryCommand(dunceService, playerService, messageManager, playerIPRepository, getConfig());
+        Objects.requireNonNull(getCommand("dunceiphistory")).setExecutor(ipHistoryCommand);
+        Objects.requireNonNull(getCommand("dunceiphistory")).setTabCompleter(ipHistoryCommand);
+
+        // Dunce Chat message command (also opens menu when run without arguments)
+        DunceChatCommand dunceChatCommand = new DunceChatCommand(dunceService, preferencesService, messageManager, guiBuilder);
         Objects.requireNonNull(getCommand("duncechat")).setExecutor(dunceChatCommand);
 
         // Toggle commands
@@ -208,14 +233,27 @@ public class DunceChat extends JavaPlugin {
         Objects.requireNonNull(getCommand("dcon")).setExecutor(toggleCommand);
         Objects.requireNonNull(getCommand("dcoff")).setExecutor(toggleCommand);
 
-        // GUI command
-        Objects.requireNonNull(getCommand("duncemenu")).setExecutor(new MenuCommand(guiBuilder));
 
         // Utility commands
         Objects.requireNonNull(getCommand("clearchat")).setExecutor(new ClearChatCommand(messageManager));
         Objects.requireNonNull(getCommand("duncereload")).setExecutor(new ReloadCommand(this, messageManager));
         Objects.requireNonNull(getCommand("duncelookup")).setExecutor(new LookupCommand(dunceService, playerService, messageManager));
         Objects.requireNonNull(getCommand("duncemigrate")).setExecutor(new MigrateCommand(schemaManager, messageManager));
+
+        // Alt detection command
+        AltLookupCommand altLookupCommand = new AltLookupCommand(dunceService, playerService, messageManager, getConfig());
+        Objects.requireNonNull(getCommand("duncealtlookup")).setExecutor(altLookupCommand);
+        Objects.requireNonNull(getCommand("duncealtlookup")).setTabCompleter(altLookupCommand);
+
+        // IP Lookup command
+        IPLookupCommand ipLookupCommand = new IPLookupCommand(dunceService, playerService, messageManager, playerIPRepository, getConfig());
+        Objects.requireNonNull(getCommand("dunceiplookup")).setExecutor(ipLookupCommand);
+        Objects.requireNonNull(getCommand("dunceiplookup")).setTabCompleter(ipLookupCommand);
+
+        // Unlink command
+        UnlinkCommand unlinkCommand = new UnlinkCommand(dunceService, playerService, messageManager);
+        Objects.requireNonNull(getCommand("dunceunlink")).setExecutor(unlinkCommand);
+        Objects.requireNonNull(getCommand("dunceunlink")).setTabCompleter(unlinkCommand);
 
         getLogger().info("Commands registered.");
     }
@@ -227,7 +265,8 @@ public class DunceChat extends JavaPlugin {
         List<String> disallowedWords = wordsConfig.getStringList("disallowed-words");
 
         getServer().getPluginManager().registerEvents(
-            new ChatListener(dunceService, playerService, preferencesService, messageManager, getConfig(), disallowedWords),
+            new ChatListener(dunceService, playerService, preferencesService, ipTrackingService,
+                           messageManager, disallowedWords),
             this);
         getServer().getPluginManager().registerEvents(
             new GreentextListener(this),

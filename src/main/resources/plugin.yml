@@ -13,10 +13,28 @@ commands:
     usage: /dunce <player> <duration> <reason>
     description: Central command for managing rule-breaking players.
     permission: duncechat.admin
+  undunce:
+    usage: /undunce <player>
+    description: Undunce a player.
+    permission: duncechat.admin
+  dunceip:
+    usage: /dunceip <player|IP> [duration] [reason]
+    aliases: [ipdunce]
+    description: Dunce a player and all accounts sharing their IP address.
+    permission: duncechat.admin
+  undunceip:
+    usage: /undunceip <player|IP>
+    description: Undunce a player and all accounts sharing their IP address.
+    permission: duncechat.admin
+  dunceiphistory:
+    usage: /dunceiphistory <player> [page]
+    aliases: [iphistory]
+    description: View the IP address history for a player.
+    permission: duncechat.admin
   duncechat:
-    usage: /duncechat <message>
+    usage: /duncechat [message]
     aliases: [dc]
-    description: Send a message in Dunce Chat
+    description: Open the DunceChat menu (no args) or send a message in Dunce Chat
   clearchat:
     usage: /clearchat
     description: Clear the chat
@@ -27,17 +45,24 @@ commands:
   dcon:
     usage: /dcon
     description: Shows the Unmoderated Chat.
-  undunce:
-    usage: /undunce <player>
-    description: Undunce a player.
-    permission: duncechat.admin
-  duncemenu:
-    usage: /duncemenu
-    description: Shows the DunceChat Menu.
   duncelookup:
     usage: /duncelookup <player>
     aliases: dl
     description: Look up details on a dunced player.
+    permission: duncechat.admin
+  duncealtlookup:
+    usage: /duncealtlookup <player> [depth]
+    aliases: [duncealts, altlookup]
+    description: Comprehensive alt account detection for a player.
+    permission: duncechat.admin
+  dunceiplookup:
+    usage: /dunceiplookup <IP address>
+    aliases: [iplookup]
+    description: Look up all players associated with an IP address and historical links.
+    permission: duncechat.admin
+  dunceunlink:
+    usage: /dunceunlink <player>
+    description: Remove a player from IP tracking and clear their IP history.
     permission: duncechat.admin
   duncereload:
     usage: /duncereload

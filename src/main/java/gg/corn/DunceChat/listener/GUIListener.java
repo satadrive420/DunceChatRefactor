@@ -84,7 +84,7 @@ public class GUIListener implements Listener {
     private void refreshGUI(Player player) {
         // Close and reopen - the GUI command will handle this
         player.closeInventory();
-        player.performCommand("duncemenu");
+        player.performCommand("duncechat");
     }
 }
 

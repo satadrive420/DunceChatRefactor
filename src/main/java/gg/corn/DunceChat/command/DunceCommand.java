@@ -144,7 +144,7 @@ public class DunceCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(messageManager.get("help_player_header"));
         sender.sendMessage(messageManager.get("help_player_dcon"));
         sender.sendMessage(messageManager.get("help_player_dcoff"));
-        sender.sendMessage(messageManager.get("help_player_duncemenu"));
+        sender.sendMessage(messageManager.get("help_player_duncechat"));
     }
 
     private boolean isDuration(String arg) {

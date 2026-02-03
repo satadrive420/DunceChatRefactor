@@ -1,5 +1,6 @@
 package gg.corn.DunceChat.command;
 
+import gg.corn.DunceChat.gui.DunceGUIBuilder;
 import gg.corn.DunceChat.service.DunceService;
 import gg.corn.DunceChat.service.PreferencesService;
 import gg.corn.DunceChat.util.MessageManager;
@@ -13,18 +14,21 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * Command handler for /duncechat (alias /dc)
- * Allows players to send messages in Dunce Chat
+ * Opens the DunceChat menu when run without arguments
+ * Allows players to send messages in Dunce Chat when run with arguments
  */
 public class DunceChatCommand implements CommandExecutor {
 
     private final DunceService dunceService;
     private final PreferencesService preferencesService;
     private final MessageManager messageManager;
+    private final DunceGUIBuilder guiBuilder;
 
-    public DunceChatCommand(DunceService dunceService, PreferencesService preferencesService, MessageManager messageManager) {
+    public DunceChatCommand(DunceService dunceService, PreferencesService preferencesService, MessageManager messageManager, DunceGUIBuilder guiBuilder) {
         this.dunceService = dunceService;
         this.preferencesService = preferencesService;
         this.messageManager = messageManager;
+        this.guiBuilder = guiBuilder;
     }
 
     @Override
@@ -36,10 +40,9 @@ public class DunceChatCommand implements CommandExecutor {
         }
 
 
-        // Check if message provided
+        // If no arguments, open the DunceChat menu
         if (args.length == 0) {
-            player.sendMessage(Component.text("Usage: /" + label + " <message>", NamedTextColor.RED));
-            player.sendMessage(Component.text("Send a message in Dunce Chat.", NamedTextColor.GRAY));
+            guiBuilder.openGUI(player);
             return true;
         }
 
@@ -71,4 +74,3 @@ public class DunceChatCommand implements CommandExecutor {
         return true;
     }
 }
-

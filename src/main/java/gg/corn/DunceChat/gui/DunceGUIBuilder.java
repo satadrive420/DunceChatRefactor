@@ -70,7 +70,7 @@ public class DunceGUIBuilder {
         }
 
         DunceRecord record = recordOpt.get();
-        ItemStack item = new ItemStack(Material.GREEN_STAINED_GLASS_PANE, 1);
+        ItemStack item = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE, 1);
         ItemMeta meta = item.getItemMeta();
 
         List<Component> lore = new ArrayList<>();
@@ -142,8 +142,16 @@ public class DunceGUIBuilder {
         String titleKey = inDunceChat ? "gui_speaking_dunce" : "gui_speaking_public";
         String loreKey = inDunceChat ? "gui_speaking_dunce_lore" : "gui_speaking_public_lore";
 
+        List<Component> lore = new ArrayList<>();
+        lore.add(messageManager.get(loreKey));
+
+        // Add /dc usage hint when in public chat mode
+        if (!inDunceChat) {
+            lore.add(messageManager.get("gui_dc_usage_hint"));
+        }
+
         meta.displayName(messageManager.get(titleKey));
-        meta.lore(List.of(messageManager.get(loreKey)));
+        meta.lore(lore);
 
         // Add NBT tag
         meta.getPersistentDataContainer().set(talkingInDunceChat, PersistentDataType.STRING, "tag");

@@ -5,33 +5,58 @@ import gg.corn.DunceChat.repository.PreferencesRepository;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service for player preferences operations
+ * Uses in-memory caching to minimize database queries
+ *
+ * Memory optimization notes:
+ * - Only online players are cached (cleaned up on quit)
+ * - Uses ConcurrentHashMap for thread safety without locking overhead
+ * - Maintains a live set of visible players to avoid iteration on every chat
  */
 public class PreferencesService {
 
     private final PreferencesRepository preferencesRepository;
+
+    // Cache for player preferences - only caches online players
+    // Memory: ~100 bytes per player (UUID + 2 booleans + object overhead)
+    private final Map<UUID, PlayerPreferences> preferencesCache = new ConcurrentHashMap<>();
+
+    // Live set of players with dunce chat visible - avoids O(n) iteration on every chat message
+    // Memory: ~40 bytes per UUID reference
+    private final Set<UUID> dunceChatVisiblePlayers = ConcurrentHashMap.newKeySet();
+
+    // Live set of players in dunce chat mode
+    private final Set<UUID> inDunceChatPlayers = ConcurrentHashMap.newKeySet();
 
     public PreferencesService(PreferencesRepository preferencesRepository) {
         this.preferencesRepository = preferencesRepository;
     }
 
     /**
-     * Get player preferences
+     * Get player preferences (uses cache for online players)
      */
     public PlayerPreferences getPreferences(UUID playerUuid) {
-        return preferencesRepository.getPreferences(playerUuid);
+        return preferencesCache.computeIfAbsent(playerUuid,
+            uuid -> preferencesRepository.getPreferences(uuid));
     }
 
     /**
-     * Check if player has dunce chat visible
+     * Check if player has dunce chat visible (O(1) lookup)
      */
     public boolean isDunceChatVisible(UUID playerUuid) {
-        return preferencesRepository.getPreferences(playerUuid).isDunceChatVisible();
+        // First check the fast set
+        if (dunceChatVisiblePlayers.contains(playerUuid)) {
+            return true;
+        }
+        // Fall back to cache/DB for players not yet loaded
+        return getPreferences(playerUuid).isDunceChatVisible();
     }
 
     /**
@@ -39,13 +64,31 @@ public class PreferencesService {
      */
     public void setDunceChatVisible(UUID playerUuid, boolean visible) {
         preferencesRepository.setDunceChatVisible(playerUuid, visible);
+
+        // Update live set
+        if (visible) {
+            dunceChatVisiblePlayers.add(playerUuid);
+        } else {
+            dunceChatVisiblePlayers.remove(playerUuid);
+        }
+
+        // Update cache
+        PlayerPreferences prefs = preferencesCache.get(playerUuid);
+        if (prefs != null) {
+            prefs.setDunceChatVisible(visible);
+        }
     }
 
     /**
-     * Check if player is in dunce chat
+     * Check if player is in dunce chat (O(1) lookup)
      */
     public boolean isInDunceChat(UUID playerUuid) {
-        return preferencesRepository.getPreferences(playerUuid).isInDunceChat();
+        // First check the fast set
+        if (inDunceChatPlayers.contains(playerUuid)) {
+            return true;
+        }
+        // Fall back to cache/DB for players not yet loaded
+        return getPreferences(playerUuid).isInDunceChat();
     }
 
     /**
@@ -53,16 +96,31 @@ public class PreferencesService {
      */
     public void setInDunceChat(UUID playerUuid, boolean inDunceChat) {
         preferencesRepository.setInDunceChat(playerUuid, inDunceChat);
+
+        // Update live set
+        if (inDunceChat) {
+            inDunceChatPlayers.add(playerUuid);
+        } else {
+            inDunceChatPlayers.remove(playerUuid);
+        }
+
+        // Update cache
+        PlayerPreferences prefs = preferencesCache.get(playerUuid);
+        if (prefs != null) {
+            prefs.setInDunceChat(inDunceChat);
+        }
     }
 
     /**
      * Get all online players who have dunce chat visible
+     * Returns a view that resolves Player objects on demand
      */
     public Set<Player> getPlayersWithDunceChatVisible() {
-        Set<Player> players = new HashSet<>();
+        Set<Player> players = ConcurrentHashMap.newKeySet();
 
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (isDunceChatVisible(player.getUniqueId())) {
+        for (UUID uuid : dunceChatVisiblePlayers) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) {
                 players.add(player);
             }
         }
@@ -89,5 +147,38 @@ public class PreferencesService {
         setInDunceChat(playerUuid, newValue);
         return newValue;
     }
-}
 
+    /**
+     * Clear cache entry for a player (call on quit to free memory)
+     */
+    public void invalidateCache(UUID playerUuid) {
+        preferencesCache.remove(playerUuid);
+        dunceChatVisiblePlayers.remove(playerUuid);
+        inDunceChatPlayers.remove(playerUuid);
+    }
+
+    /**
+     * Clear entire cache
+     */
+    public void clearCache() {
+        preferencesCache.clear();
+        dunceChatVisiblePlayers.clear();
+        inDunceChatPlayers.clear();
+    }
+
+    /**
+     * Pre-load preferences for a player (call on join)
+     */
+    public void loadIntoCache(UUID playerUuid) {
+        PlayerPreferences prefs = preferencesRepository.getPreferences(playerUuid);
+        preferencesCache.put(playerUuid, prefs);
+
+        // Update live sets based on loaded preferences
+        if (prefs.isDunceChatVisible()) {
+            dunceChatVisiblePlayers.add(playerUuid);
+        }
+        if (prefs.isInDunceChat()) {
+            inDunceChatPlayers.add(playerUuid);
+        }
+    }
+}

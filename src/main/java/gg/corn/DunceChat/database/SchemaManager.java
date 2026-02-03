@@ -97,6 +97,22 @@ public class SchemaManager {
                 )
             """);
 
+            // Player IP log table - silently tracks IP associations
+            stmt.execute("""
+                CREATE TABLE player_ip_log (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    player_uuid VARCHAR(36) NOT NULL,
+                    ip_address VARCHAR(45) NOT NULL,
+                    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_player (player_uuid),
+                    INDEX idx_ip (ip_address),
+                    INDEX idx_last_seen (last_seen),
+                    UNIQUE KEY unique_player_ip (player_uuid, ip_address),
+                    FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+                )
+            """);
+
             // Set schema version to 3
             updateSchemaVersion(CURRENT_SCHEMA_VERSION);
             logger.info("[DunceChat] Database schema v3 initialized successfully!");
@@ -177,6 +193,33 @@ public class SchemaManager {
                 logger.info("[DunceChat] Successfully created pending_messages table.");
             } else {
                 logger.info("[DunceChat] pending_messages table already exists, skipping.");
+            }
+
+            // Ensure player_ip_log table exists
+            logger.info("[DunceChat] Checking if player_ip_log table exists...");
+            if (!tableExists(conn, "player_ip_log")) {
+                logger.info("[DunceChat] Table does not exist. Creating player_ip_log table...");
+
+                String createIPLogSQL = """
+                    CREATE TABLE player_ip_log (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        player_uuid VARCHAR(36) NOT NULL,
+                        ip_address VARCHAR(45) NOT NULL,
+                        first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_player (player_uuid),
+                        INDEX idx_ip (ip_address),
+                        INDEX idx_last_seen (last_seen),
+                        UNIQUE KEY unique_player_ip (player_uuid, ip_address),
+                        FOREIGN KEY (player_uuid) REFERENCES players(uuid) ON DELETE CASCADE
+                    )
+                """;
+                logger.info("[DunceChat] Executing SQL: CREATE TABLE player_ip_log...");
+
+                stmt.execute(createIPLogSQL);
+                logger.info("[DunceChat] Successfully created player_ip_log table.");
+            } else {
+                logger.info("[DunceChat] player_ip_log table already exists, skipping.");
             }
 
             return true;
