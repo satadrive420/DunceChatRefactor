@@ -1,7 +1,6 @@
 package gg.corn.DunceChat.listener;
 
 import gg.corn.DunceChat.service.DunceService;
-import gg.corn.DunceChat.service.IPTrackingService;
 import gg.corn.DunceChat.service.PlayerService;
 import gg.corn.DunceChat.service.PreferencesService;
 import gg.corn.DunceChat.util.MessageManager;
@@ -12,9 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
@@ -27,31 +24,29 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Refactored chat event listener using services
+ * Handles chat events for dunced players and dunce chat observers
  * Optimized for performance with pre-compiled regex and minimal allocations
+ *
+ * Note: Player join/quit events moved to PlayerConnectionListener
+ * Note: Command blocking moved to DunceCommandBlockListener
  */
 public class ChatListener implements Listener {
 
     private final DunceService dunceService;
     private final PlayerService playerService;
     private final PreferencesService preferencesService;
-    private final IPTrackingService ipTrackingService;
     private final MessageManager messageManager;
     private static final Logger logger = Logger.getLogger("DunceChat");
 
     // Pre-compiled regex pattern for word filtering (much faster than loop + contains)
     private final Pattern disallowedWordsPattern;
 
-    // Pre-compiled whisper command set (avoid creating new list on every command)
-    private static final Set<String> WHISPER_COMMANDS = Set.of("whisper", "w", "msg", "r", "reply");
-
     public ChatListener(DunceService dunceService, PlayerService playerService,
-                       PreferencesService preferencesService, IPTrackingService ipTrackingService,
-                       MessageManager messageManager, List<String> disallowedWords) {
+                       PreferencesService preferencesService, MessageManager messageManager,
+                       List<String> disallowedWords) {
         this.dunceService = dunceService;
         this.playerService = playerService;
         this.preferencesService = preferencesService;
-        this.ipTrackingService = ipTrackingService;
         this.messageManager = messageManager;
 
         // Pre-compile the disallowed words into a single regex pattern
@@ -84,40 +79,38 @@ public class ChatListener implements Listener {
         return Pattern.compile(regex.toString());
     }
 
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        playerService.handlePlayerJoin(player);
 
-        // Check if player's dunce has expired (handles edge case before scheduled task runs)
-        dunceService.checkAndProcessExpiredDunceOnLogin(player.getUniqueId());
-
-        // Pre-load preferences into cache for faster access during chat
-        preferencesService.loadIntoCache(player.getUniqueId());
-
-        // Handle IP tracking, alt detection, watchlist, and auto-dunce
-        ipTrackingService.handlePlayerJoin(player);
-
-        // Send any pending messages (like dunce expiry notifications)
-        dunceService.sendPendingMessages(player.getUniqueId());
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
+    /**
+     * Cancel chat events for dunced players and dunce chat observers at LOWEST priority.
+     * This prevents third-party plugins (Dynmap, etc.) from seeing these messages.
+     * Runs before all other plugins process the chat event.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onChatPreProcess(@NotNull AsyncChatEvent event) {
         Player player = event.getPlayer();
         UUID playerUuid = player.getUniqueId();
 
-        playerService.handlePlayerQuit(player);
-
-        // Clean up caches to free memory
-        preferencesService.invalidateCache(playerUuid);
-        dunceService.invalidateCache(playerUuid);
+        // Cancel event if player is dunced or in dunce chat observer mode
+        // This blocks the event from being seen by third-party chat plugins
+        if (dunceService.isDunced(playerUuid) || preferencesService.isInDunceChat(playerUuid)) {
+            event.setCancelled(true);
+        }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onPlayerChat(@NotNull AsyncChatEvent event) {
+        // Skip if event not cancelled (normal chat handled by other plugins/default system)
+        if (!event.isCancelled()) {
+            return;
+        }
+
         Player player = event.getPlayer();
         UUID playerUuid = player.getUniqueId();
+
+        // Skip if not cancelled by our pre-processor (could be cancelled by another plugin)
+        if (!dunceService.isDunced(playerUuid) && !preferencesService.isInDunceChat(playerUuid)) {
+            return;
+        }
 
         Component displayNameComponent = playerService.getDisplayNameComponent(player);
         Component prefixComponent = playerService.getPrefixComponent(player);
@@ -131,7 +124,6 @@ public class ChatListener implements Listener {
         if (dunceService.isDunced(playerUuid)) {
             // Handle dunced player chat - use dunce_chat_format
             Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
-            event.viewers().retainAll(recipients);
 
             // Create placeholder map for MiniMessage
             Map<String, Component> placeholders = new HashMap<>();
@@ -139,7 +131,11 @@ public class ChatListener implements Listener {
             placeholders.put("message", event.message());
 
             Component message = messageManager.getWithComponents("dunce_chat_format", placeholders);
-            event.renderer((source, sourceDisplayName, msg, viewer) -> message);
+
+            // Manually send message to each recipient (event is cancelled, so we send directly)
+            for (Player recipient : recipients) {
+                recipient.sendMessage(message);
+            }
 
             // Log dunce chat message
             logger.info("[DunceChat] [Dunced] " + player.getName() + ": " + plainMessage);
@@ -149,15 +145,17 @@ public class ChatListener implements Listener {
             Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
             recipients.add(player);
 
-            event.viewers().retainAll(recipients);
-
             // Create placeholder map for MiniMessage
             Map<String, Component> placeholders = new HashMap<>();
             placeholders.put("player", fullNameComponent);
             placeholders.put("message", event.message());
 
             Component message = messageManager.getWithComponents("dunce_chat_observer_format", placeholders);
-            event.renderer((source, sourceDisplayName, msg, viewer) -> message);
+
+            // Manually send message to each recipient (event is cancelled, so we send directly)
+            for (Player recipient : recipients) {
+                recipient.sendMessage(message);
+            }
 
             // Log dunce chat message from observer
             logger.info("[DunceChat] [Observer] " + player.getName() + ": " + plainMessage);
@@ -201,36 +199,136 @@ public class ChatListener implements Listener {
         }
     }
 
-    @EventHandler
-    public void onCommandPreprocess(@NotNull PlayerCommandPreprocessEvent event) {
+    // ===== LEGACY BUKKIT CHAT EVENT SUPPORT =====
+    // These handlers support the legacy Bukkit AsyncPlayerChatEvent for compatibility
+    // with plugins (like DiscordSRV by default) that still use the deprecated event system.
+
+    /**
+     * Cancel legacy chat events for dunced players and dunce chat observers at LOWEST priority.
+     * This provides compatibility with plugins that use the deprecated AsyncPlayerChatEvent.
+     */
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onLegacyChatPreProcess(@NotNull AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
-        String message = event.getMessage();
+        UUID playerUuid = player.getUniqueId();
 
-        // Block /me command for dunced players
-        if (message.startsWith("/me") && dunceService.isDunced(player.getUniqueId())) {
+        // Cancel event if player is dunced or in dunce chat observer mode
+        if (dunceService.isDunced(playerUuid) || preferencesService.isInDunceChat(playerUuid)) {
             event.setCancelled(true);
-            player.sendMessage(messageManager.get("me_command_blocked"));
+        }
+    }
+
+    /**
+     * Handle cancelled legacy chat events at MONITOR priority.
+     * This ensures dunced player chat is still processed even when using legacy event system.
+     */
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    public void onLegacyPlayerChat(@NotNull AsyncPlayerChatEvent event) {
+        // Skip if event not cancelled (normal chat handled by other plugins/default system)
+        if (!event.isCancelled()) {
             return;
         }
 
-        // Block whispers to players without dunce chat visible
-        if (!message.contains(" ") || !dunceService.isDunced(player.getUniqueId())) {
+        Player player = event.getPlayer();
+        UUID playerUuid = player.getUniqueId();
+
+        // Skip if not cancelled by our pre-processor (could be cancelled by another plugin)
+        if (!dunceService.isDunced(playerUuid) && !preferencesService.isInDunceChat(playerUuid)) {
             return;
         }
 
-        String command = message.substring(1, message.contains(" ") ? message.indexOf(" ") : message.length()).toLowerCase();
+        Component displayNameComponent = playerService.getDisplayNameComponent(player);
+        Component prefixComponent = playerService.getPrefixComponent(player);
 
-        if (WHISPER_COMMANDS.contains(command)) {
-            String[] parts = message.split(" ");
-            if (parts.length >= 2) {
-                String recipientName = parts[1];
-                playerService.getUuidByName(recipientName).ifPresent(recipientUuid -> {
-                    if (!preferencesService.isDunceChatVisible(recipientUuid)) {
-                        event.setCancelled(true);
-                        player.sendMessage(messageManager.get("whisper_blocked"));
-                    }
-                });
+        // Combine prefix and name into a single component
+        Component fullNameComponent = prefixComponent.append(displayNameComponent);
+
+        // Convert legacy string message to Component
+        Component messageComponent = Component.text(event.getMessage());
+
+        // Get plain text message for logging
+        String plainMessage = event.getMessage();
+
+        if (dunceService.isDunced(playerUuid)) {
+            // Handle dunced player chat - use dunce_chat_format
+            Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
+
+            // Create placeholder map for MiniMessage
+            Map<String, Component> placeholders = new HashMap<>();
+            placeholders.put("player", fullNameComponent);
+            placeholders.put("message", messageComponent);
+
+            Component message = messageManager.getWithComponents("dunce_chat_format", placeholders);
+
+            // Manually send message to each recipient (event is cancelled, so we send directly)
+            for (Player recipient : recipients) {
+                recipient.sendMessage(message);
             }
+
+            // Log dunce chat message
+            logger.info("[DunceChat] [Dunced] " + player.getName() + ": " + plainMessage);
+
+        } else if (preferencesService.isInDunceChat(playerUuid)) {
+            // Handle staff/observer in dunce chat - use dunce_chat_observer_format
+            Set<Player> recipients = preferencesService.getPlayersWithDunceChatVisible();
+            recipients.add(player);
+
+            // Create placeholder map for MiniMessage
+            Map<String, Component> placeholders = new HashMap<>();
+            placeholders.put("player", fullNameComponent);
+            placeholders.put("message", messageComponent);
+
+            Component message = messageManager.getWithComponents("dunce_chat_observer_format", placeholders);
+
+            // Manually send message to each recipient (event is cancelled, so we send directly)
+            for (Player recipient : recipients) {
+                recipient.sendMessage(message);
+            }
+
+            // Log dunce chat message from observer
+            logger.info("[DunceChat] [Observer] " + player.getName() + ": " + plainMessage);
+        }
+    }
+
+    /**
+     * Word filter for legacy chat event.
+     */
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.LOW)
+    public void onLegacyWordFilter(AsyncPlayerChatEvent event) {
+        // Skip if no disallowed words configured
+        if (disallowedWordsPattern == null) {
+            return;
+        }
+
+        Player player = event.getPlayer();
+
+        // Skip if player has admin permission
+        if (player.hasPermission("duncechat.admin")) {
+            return;
+        }
+
+        // Skip if already in unmoderated chat
+        if (preferencesService.isInDunceChat(player.getUniqueId())) {
+            return;
+        }
+
+        String message = event.getMessage();
+        String lowerMessage = message.toLowerCase();
+
+        // Use the pre-compiled regex pattern for fast matching
+        Matcher matcher = disallowedWordsPattern.matcher(lowerMessage);
+        if (matcher.find()) {
+            UUID playerUuid = player.getUniqueId();
+
+            if (!dunceService.isDunced(playerUuid)) {
+                // Auto-dunce with the trigger message stored
+                dunceService.duncePlayer(playerUuid, "AutoDunced", null, null, message);
+            }
+
+            event.setCancelled(true);
         }
     }
 }

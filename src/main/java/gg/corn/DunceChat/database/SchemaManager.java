@@ -236,8 +236,15 @@ public class SchemaManager {
 
     /**
      * Check if old schema tables exist that need migration
+     * H2 databases never need migration as they are only used for fresh installs
      */
     public boolean needsMigration() {
+        // H2 databases are always fresh installs - no migration needed
+        if (databaseManager.getDatabaseType() == DatabaseManager.DatabaseType.H2) {
+            return false;
+        }
+
+        // Check for old MySQL schema tables
         try (Connection conn = databaseManager.getConnection()) {
             return tableExists(conn, "users") ||
                    tableExists(conn, "dunced_players") ||
@@ -251,29 +258,53 @@ public class SchemaManager {
 
     /**
      * Migrate from old schema to new schema
+     * Only supported for MySQL databases - H2 is always a fresh install
      */
     public boolean migrateFromOldSchema() {
+        // H2 databases don't support migration (they're always fresh installs)
+        if (databaseManager.getDatabaseType() == DatabaseManager.DatabaseType.H2) {
+            logger.info("[DunceChat] Migration is only supported for MySQL databases. H2 databases are always fresh installs.");
+            return true; // Return true to allow initialization to continue
+        }
+
         logger.info("[DunceChat] Starting migration from old schema...");
 
         try (Connection conn = databaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
 
+            boolean isH2 = databaseManager.getDatabaseType() == DatabaseManager.DatabaseType.H2;
 
             // Migrate users to players table
             if (tableExists(conn, "users")) {
                 try {
-                    stmt.execute("""
-                        INSERT INTO players (uuid, username, first_join, last_join, last_quit)
-                        SELECT uuid, display_name, 
-                               COALESCE(last_login, CURRENT_TIMESTAMP),
-                               COALESCE(last_login, CURRENT_TIMESTAMP),
-                               last_logout
-                        FROM users
-                        ON DUPLICATE KEY UPDATE
-                            username = VALUES(username),
-                            last_join = COALESCE(VALUES(last_join), last_join),
-                            last_quit = VALUES(last_quit)
-                    """);
+                    String sql;
+                    if (isH2) {
+                        // H2: Use MERGE syntax
+                        sql = """
+                            MERGE INTO players (uuid, username, first_join, last_join, last_quit)
+                            KEY(uuid)
+                            SELECT uuid, display_name, 
+                                   COALESCE(last_login, CURRENT_TIMESTAMP),
+                                   COALESCE(last_login, CURRENT_TIMESTAMP),
+                                   last_logout
+                            FROM users
+                        """;
+                    } else {
+                        // MySQL: Use INSERT ON DUPLICATE KEY UPDATE
+                        sql = """
+                            INSERT INTO players (uuid, username, first_join, last_join, last_quit)
+                            SELECT uuid, display_name, 
+                                   COALESCE(last_login, CURRENT_TIMESTAMP),
+                                   COALESCE(last_login, CURRENT_TIMESTAMP),
+                                   last_logout
+                            FROM users
+                            ON DUPLICATE KEY UPDATE
+                                username = VALUES(username),
+                                last_join = COALESCE(VALUES(last_join), last_join),
+                                last_quit = VALUES(last_quit)
+                        """;
+                    }
+                    stmt.execute(sql);
                     logger.info("[DunceChat] Migrated user data to new schema.");
                 } catch (SQLException e) {
                     logger.warning("[DunceChat] Failed to migrate users table: " + e.getMessage());
@@ -302,11 +333,23 @@ public class SchemaManager {
             // Migrate preferences
             if (tableExists(conn, "dunce_visible")) {
                 try {
-                    stmt.execute("""
-                        INSERT INTO player_preferences (player_uuid, dunce_chat_visible)
-                        SELECT uuid, visible FROM dunce_visible
-                        ON DUPLICATE KEY UPDATE dunce_chat_visible = VALUES(dunce_chat_visible)
-                    """);
+                    String sql;
+                    if (isH2) {
+                        // H2: Use MERGE syntax
+                        sql = """
+                            MERGE INTO player_preferences (player_uuid, dunce_chat_visible)
+                            KEY(player_uuid)
+                            SELECT uuid, visible FROM dunce_visible
+                        """;
+                    } else {
+                        // MySQL: Use INSERT ON DUPLICATE KEY UPDATE
+                        sql = """
+                            INSERT INTO player_preferences (player_uuid, dunce_chat_visible)
+                            SELECT uuid, visible FROM dunce_visible
+                            ON DUPLICATE KEY UPDATE dunce_chat_visible = VALUES(dunce_chat_visible)
+                        """;
+                    }
+                    stmt.execute(sql);
                     logger.info("[DunceChat] Migrated dunce_visible preferences.");
                 } catch (SQLException e) {
                     logger.warning("[DunceChat] Failed to migrate dunce_visible table: " + e.getMessage());
@@ -316,11 +359,23 @@ public class SchemaManager {
 
             if (tableExists(conn, "dunce_chat")) {
                 try {
-                    stmt.execute("""
-                        INSERT INTO player_preferences (player_uuid, in_dunce_chat)
-                        SELECT uuid, in_chat FROM dunce_chat
-                        ON DUPLICATE KEY UPDATE in_dunce_chat = VALUES(in_dunce_chat)
-                    """);
+                    String sql;
+                    if (isH2) {
+                        // H2: Use MERGE syntax
+                        sql = """
+                            MERGE INTO player_preferences (player_uuid, in_dunce_chat)
+                            KEY(player_uuid)
+                            SELECT uuid, in_chat FROM dunce_chat
+                        """;
+                    } else {
+                        // MySQL: Use INSERT ON DUPLICATE KEY UPDATE
+                        sql = """
+                            INSERT INTO player_preferences (player_uuid, in_dunce_chat)
+                            SELECT uuid, in_chat FROM dunce_chat
+                            ON DUPLICATE KEY UPDATE in_dunce_chat = VALUES(in_dunce_chat)
+                        """;
+                    }
+                    stmt.execute(sql);
                     logger.info("[DunceChat] Migrated dunce_chat preferences.");
                 } catch (SQLException e) {
                     logger.warning("[DunceChat] Failed to migrate dunce_chat table: " + e.getMessage());
@@ -352,26 +407,45 @@ public class SchemaManager {
     }
 
     /**
-     * Backup old tables by renaming them
+     * Backup old tables using database-specific syntax
+     * MySQL: RENAME TABLE
+     * H2: CREATE TABLE AS SELECT (though this should never run for H2)
      */
     private void backupOldTables(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
             String timestamp = String.valueOf(System.currentTimeMillis());
+            boolean isH2 = databaseManager.getDatabaseType() == DatabaseManager.DatabaseType.H2;
 
             if (tableExists(conn, "users")) {
-                stmt.execute("RENAME TABLE users TO users_backup_" + timestamp);
+                backupTable(stmt, "users", timestamp, isH2);
             }
             if (tableExists(conn, "dunced_players")) {
-                stmt.execute("RENAME TABLE dunced_players TO dunced_players_backup_" + timestamp);
+                backupTable(stmt, "dunced_players", timestamp, isH2);
             }
             if (tableExists(conn, "dunce_visible")) {
-                stmt.execute("RENAME TABLE dunce_visible TO dunce_visible_backup_" + timestamp);
+                backupTable(stmt, "dunce_visible", timestamp, isH2);
             }
             if (tableExists(conn, "dunce_chat")) {
-                stmt.execute("RENAME TABLE dunce_chat TO dunce_chat_backup_" + timestamp);
+                backupTable(stmt, "dunce_chat", timestamp, isH2);
             }
 
             logger.info("[DunceChat] Old tables backed up with suffix: _backup_" + timestamp);
+        }
+    }
+
+    /**
+     * Backup a single table using database-specific syntax
+     */
+    private void backupTable(Statement stmt, String tableName, String timestamp, boolean isH2) throws SQLException {
+        String backupName = tableName + "_backup_" + timestamp;
+
+        if (isH2) {
+            // H2: Create backup table then drop original
+            stmt.execute("CREATE TABLE " + backupName + " AS SELECT * FROM " + tableName);
+            stmt.execute("DROP TABLE " + tableName);
+        } else {
+            // MySQL: Simple rename
+            stmt.execute("RENAME TABLE " + tableName + " TO " + backupName);
         }
     }
 
@@ -450,13 +524,24 @@ public class SchemaManager {
     }
 
     /**
-     * Update schema version
+     * Update schema version using database-specific SQL
      */
     private void updateSchemaVersion(int version) {
         try (Connection conn = databaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
-            stmt.execute("INSERT INTO schema_version (version) VALUES (" + version + ") " +
-                        "ON DUPLICATE KEY UPDATE version = " + version);
+
+            String sql;
+            if (databaseManager.getDatabaseType() == DatabaseManager.DatabaseType.H2) {
+                // H2 uses MERGE syntax
+                sql = "MERGE INTO schema_version (version, applied_at) " +
+                      "KEY(version) VALUES (" + version + ", CURRENT_TIMESTAMP)";
+            } else {
+                // MySQL uses INSERT ON DUPLICATE KEY UPDATE
+                sql = "INSERT INTO schema_version (version) VALUES (" + version + ") " +
+                      "ON DUPLICATE KEY UPDATE version = " + version;
+            }
+
+            stmt.execute(sql);
             logger.info("[DunceChat] Updated schema version to " + version);
         } catch (SQLException e) {
             logger.severe("[DunceChat] Failed to update schema version!");

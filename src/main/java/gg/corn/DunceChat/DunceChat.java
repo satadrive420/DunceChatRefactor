@@ -5,8 +5,10 @@ import gg.corn.DunceChat.database.DatabaseManager;
 import gg.corn.DunceChat.database.SchemaManager;
 import gg.corn.DunceChat.gui.DunceGUIBuilder;
 import gg.corn.DunceChat.listener.ChatListener;
+import gg.corn.DunceChat.listener.DunceCommandBlockListener;
 import gg.corn.DunceChat.listener.GUIListener;
 import gg.corn.DunceChat.listener.GreentextListener;
+import gg.corn.DunceChat.listener.PlayerConnectionListener;
 import gg.corn.DunceChat.repository.DunceRepository;
 import gg.corn.DunceChat.repository.PendingMessageRepository;
 import gg.corn.DunceChat.repository.PlayerIPRepository;
@@ -54,6 +56,7 @@ public class DunceChat extends JavaPlugin {
     private MessageManager messageManager;
     private DunceGUIBuilder guiBuilder;
 
+
     // Config
     private FileConfiguration wordsConfig;
 
@@ -99,6 +102,7 @@ public class DunceChat extends JavaPlugin {
 
     @Override
     public void onDisable() {
+
         if (databaseManager != null) {
             databaseManager.close();
         }
@@ -141,6 +145,11 @@ public class DunceChat extends JavaPlugin {
             getLogger().info("Initializing database connection pool...");
             databaseManager.initialize();
             getLogger().info("Database connection pool initialized!");
+
+            // Log database type and migration support
+            DatabaseManager.DatabaseType dbType = databaseManager.getDatabaseType();
+            boolean migrationSupported = (dbType == DatabaseManager.DatabaseType.MYSQL);
+            getLogger().info("Using " + dbType + " database. Migration support: " + (migrationSupported ? "Yes" : "No (H2 is fresh install only)"));
 
             getLogger().info("Initializing database schema...");
             schemaManager = new SchemaManager(databaseManager);
@@ -264,13 +273,29 @@ public class DunceChat extends JavaPlugin {
     private void registerListeners() {
         List<String> disallowedWords = wordsConfig.getStringList("disallowed-words");
 
+        // Player connection events (join/quit) with async optimization
         getServer().getPluginManager().registerEvents(
-            new ChatListener(dunceService, playerService, preferencesService, ipTrackingService,
+            new PlayerConnectionListener(dunceService, playerService, preferencesService,
+                                        ipTrackingService, this),
+            this);
+
+        // Chat events (dunce chat, word filter, legacy support)
+        getServer().getPluginManager().registerEvents(
+            new ChatListener(dunceService, playerService, preferencesService,
                            messageManager, disallowedWords),
             this);
+
+        // Command blocking for dunced players
+        getServer().getPluginManager().registerEvents(
+            new DunceCommandBlockListener(dunceService, playerService, preferencesService, messageManager),
+            this);
+
+        // Greentext formatting
         getServer().getPluginManager().registerEvents(
             new GreentextListener(this),
             this);
+
+        // GUI click handling
         getServer().getPluginManager().registerEvents(
             new GUIListener(dunceService, preferencesService, messageManager, this),
             this);

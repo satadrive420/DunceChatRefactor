@@ -13,13 +13,16 @@ database:
   mysql:
     host: 'localhost'
     port: 3306
-    database: 'detox_db'
+    database: 'duncechat'
     username: 'your_username'
     password: 'your_password'
 
 # Auto-migrate from old schema on startup (recommended)
+# Note: Migration is only supported for MySQL databases
+# H2 databases are always fresh installs and don't require migration
 auto-migrate: true
 
+# Show Dunce Chat by default to all players
 visible-by-default: false
 
 # PlaceholderAPI Integration (requires PlaceholderAPI plugin)
@@ -29,6 +32,7 @@ visible-by-default: false
 display-name-placeholder: ""
 prefix-placeholder: ""
 
+# Enable automatic green text for messages starting with '>'
 auto-green-text: true
 
 # Colors for messages (MiniMessage format)
@@ -38,5 +42,52 @@ auto-green-text: true
 baseColor: gray
 highlightColor: gold
 
-dunceStar: false
+# ============================================
+# IP Tracking & Alt Detection Configuration
+# ============================================
+
+ip-tracking:
+  # Enable IP logging for alt detection
+  enabled: true
+
+  # Auto-dunce players who join with the same IP as a currently dunced player
+  auto-dunce-on-ip-match: false
+
+  # Show alt detection warning to admins when a player joins
+  # with a matching IP to another account
+  notify-admins-on-alt-join: true
+
+  # Auto alt check depth on player join (1-5)
+  # Higher depth = more thorough but slower
+  alt-check-depth: 2
+
+  # Maximum depth allowed for /duncealtlookup command (1-10)
+  # Higher values allow more thorough searches but take longer
+  max-lookup-depth: 5
+
+  # Items per page for paginated lookup results
+  items-per-page: 10
+
+# IP Whitelist - IPs in this list will be ignored for alt detection
+# Useful for schools, internet cafes, shared networks, VPNs, etc.
+# Supports exact IPs and CIDR notation (e.g., 192.168.1.0/24)
+ip-whitelist:
+  enabled: false
+  addresses:
+    - "127.0.0.1"
+    # - "192.168.1.0/24"    # Example: Entire subnet
+    # - "10.0.0.1"          # Example: Specific IP
+
+# IP Watchlist - IPs that trigger special alerts when players join
+# Useful for known VPNs, proxies, or previously banned IPs
+ip-watchlist:
+  enabled: false
+  # Notify admins when a watchlisted IP joins
+  notify-on-join: true
+  addresses:
+    # - ip: "1.2.3.4"
+    #   reason: "Known VPN"
+    # - ip: "5.6.7.8"
+    #   reason: "Previous ban evasion"
+
 

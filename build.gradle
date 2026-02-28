@@ -15,11 +15,16 @@ repositories {
     maven {
         url = 'https://repo.extendedclip.com/releases/'
     }
+    maven {
+        name = "discordsrv"
+        url = "https://nexus.scarsz.me/content/groups/public/"
+    }
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.10-R0.1-SNAPSHOT")
     compileOnly 'me.clip:placeholderapi:2.11.7'
+    compileOnly 'com.discordsrv:discordsrv:1.30.4'
     implementation 'com.zaxxer:HikariCP:5.1.0'
     implementation 'org.slf4j:slf4j-api:2.0.9'
     implementation 'org.slf4j:slf4j-jdk14:2.0.9' // Bridge SLF4J to Java Util Logging

@@ -174,5 +174,12 @@ public class DatabaseManager {
     public boolean isInitialized() {
         return dataSource != null && !dataSource.isClosed();
     }
+
+    /**
+     * Get the database type (MySQL or H2)
+     */
+    public DatabaseType getDatabaseType() {
+        return databaseType;
+    }
 }
 
